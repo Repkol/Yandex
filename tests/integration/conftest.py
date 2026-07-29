@@ -24,6 +24,15 @@ def disk_client() -> Iterator[YandexDiskClient]:
 
 
 @pytest.fixture(scope="session")
+def unauthorized_disk_client(
+    disk_client: YandexDiskClient,
+) -> Iterator[YandexDiskClient]:
+    """Client with a deliberately invalid token for deterministic 401 checks."""
+    with YandexDiskClient("invalid-token-for-negative-api-test") as client:
+        yield client
+
+
+@pytest.fixture(scope="session")
 def sandbox_path(disk_client: YandexDiskClient) -> Iterator[str]:
     path = f"disk:/api-autotests-{uuid4().hex}"
     disk_client.create_folder(path)
@@ -40,6 +49,33 @@ def sandbox_path(disk_client: YandexDiskClient) -> Iterator[str]:
 def unique_child(parent: str, prefix: str) -> str:
     """Return a collision-resistant child path inside the test sandbox."""
     return f"{parent}/{prefix}-{uuid4().hex}"
+
+
+def assert_error_response(
+    response: requests.Response,
+    expected_status: int,
+) -> dict[str, object]:
+    """Assert the common documented error envelope."""
+    assert response.status_code == expected_status
+    assert response.headers["Content-Type"].startswith("application/json")
+
+    payload = response.json()
+    assert isinstance(payload["error"], str)
+    assert isinstance(payload["description"], str)
+    assert isinstance(payload["message"], str)
+    return payload
+
+
+def upload_test_file(
+    client: YandexDiskClient,
+    path: str,
+    content: bytes,
+) -> dict[str, object]:
+    """Upload a small fixture file and return its resource metadata."""
+    upload_url = client.get_upload_link(path).json()["href"]
+    upload = requests.put(upload_url, data=content, timeout=client.timeout)
+    assert upload.status_code == requests.codes.created
+    return client.get_resource(path).json()
 
 
 def wait_for_operation(
@@ -82,3 +118,52 @@ def wait_for_resource_state(
 
     expected = "appear" if exists else "disappear"
     pytest.fail(f"Resource {path!r} did not {expected} in {timeout} seconds")
+
+
+def wait_for_trash_resource_state(
+    client: YandexDiskClient,
+    path: str,
+    *,
+    exists: bool,
+    timeout: float = 15.0,
+) -> None:
+    """Poll Trash metadata until one test resource appears or disappears."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        response = client.get_trash_resource(path, expected_statuses={200, 404})
+        if (response.status_code == 200) is exists:
+            return
+        time.sleep(0.25)
+
+    expected = "appear in" if exists else "disappear from"
+    pytest.fail(f"Resource {path!r} did not {expected} Trash in {timeout} seconds")
+
+
+def wait_for_trashed_origin(
+    client: YandexDiskClient,
+    origin_path: str,
+    *,
+    timeout: float = 15.0,
+) -> dict[str, object]:
+    """Find a newly trashed test item by its stable original Disk path."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        offset = 0
+        while True:
+            response = client.get_trash_resource(
+                "trash:/",
+                limit=1000,
+                offset=offset,
+            ).json()
+            embedded = response["_embedded"]
+            for item in embedded["items"]:
+                if item.get("origin_path") == origin_path:
+                    return item
+
+            offset += len(embedded["items"])
+            if offset >= embedded["total"] or not embedded["items"]:
+                break
+
+        time.sleep(0.25)
+
+    pytest.fail(f"Resource with origin_path={origin_path!r} did not appear in Trash")

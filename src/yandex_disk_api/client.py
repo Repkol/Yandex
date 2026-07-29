@@ -8,6 +8,15 @@ from typing import Any
 import requests
 
 
+def _query_params(**values: str | int | bool | None) -> dict[str, str | int]:
+    """Drop unset values and serialize booleans as API query parameters."""
+    return {
+        name: str(value).lower() if isinstance(value, bool) else value
+        for name, value in values.items()
+        if value is not None
+    }
+
+
 class YandexDiskApiError(RuntimeError):
     """Raised when Yandex.Disk returns an unexpected HTTP status."""
 
@@ -88,8 +97,14 @@ class YandexDiskClient:
 
     def get_resource(
         self,
-        path: str,
+        path: str | None,
         *,
+        fields: str | None = None,
+        limit: int | str | None = None,
+        offset: int | None = None,
+        preview_crop: bool | None = None,
+        preview_size: str | None = None,
+        sort: str | None = None,
         expected_statuses: Collection[int] = (200,),
     ) -> requests.Response:
         """GET metadata for a file or directory."""
@@ -97,7 +112,15 @@ class YandexDiskClient:
             "GET",
             "/resources",
             expected_statuses=expected_statuses,
-            params={"path": path},
+            params=_query_params(
+                path=path,
+                fields=fields,
+                limit=limit,
+                offset=offset,
+                preview_crop=preview_crop,
+                preview_size=preview_size,
+                sort=sort,
+            ),
         )
 
     def create_folder(self, path: str) -> requests.Response:
@@ -130,19 +153,70 @@ class YandexDiskClient:
 
     def delete_resource(
         self,
-        path: str,
+        path: str | None,
         *,
-        permanently: bool = True,
+        fields: str | None = None,
+        force_async: bool | None = None,
+        md5: str | None = None,
+        permanently: bool | None = None,
+        expected_statuses: Collection[int] = (202, 204),
     ) -> requests.Response:
         """DELETE a file or directory."""
         return self._request(
             "DELETE",
             "/resources",
+            expected_statuses=expected_statuses,
+            params=_query_params(
+                path=path,
+                fields=fields,
+                force_async=force_async,
+                md5=md5,
+                permanently=permanently,
+            ),
+        )
+
+    def get_upload_link(
+        self,
+        path: str,
+        *,
+        overwrite: bool = True,
+    ) -> requests.Response:
+        """GET a one-time URL used by test fixtures to upload a file."""
+        return self._request(
+            "GET",
+            "/resources/upload",
+            expected_statuses={200},
+            params=_query_params(path=path, overwrite=overwrite),
+        )
+
+    def get_trash_resource(
+        self,
+        path: str,
+        *,
+        limit: int | None = None,
+        offset: int | None = None,
+        expected_statuses: Collection[int] = (200,),
+    ) -> requests.Response:
+        """GET metadata for a resource moved to the Trash."""
+        return self._request(
+            "GET",
+            "/trash/resources",
+            expected_statuses=expected_statuses,
+            params=_query_params(path=path, limit=limit, offset=offset),
+        )
+
+    def delete_trash_resource(
+        self,
+        path: str,
+        *,
+        force_async: bool = True,
+    ) -> requests.Response:
+        """Permanently DELETE one test resource from the Trash."""
+        return self._request(
+            "DELETE",
+            "/trash/resources",
             expected_statuses={202, 204},
-            params={
-                "path": path,
-                "permanently": str(permanently).lower(),
-            },
+            params=_query_params(path=path, force_async=force_async),
         )
 
     def get_operation(

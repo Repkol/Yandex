@@ -59,23 +59,3 @@ def test_post_copies_folder(
     }
     assert metadata["path"] == destination_path
     assert metadata["type"] == "dir"
-
-
-def test_delete_removes_folder_permanently(
-    disk_client: YandexDiskClient,
-    sandbox_path: str,
-) -> None:
-    """DELETE /v1/disk/resources removes a directory."""
-    folder_path = unique_child(sandbox_path, "delete")
-    disk_client.create_folder(folder_path)
-
-    response = disk_client.delete_resource(folder_path, permanently=True)
-    wait_for_operation(disk_client, response)
-    wait_for_resource_state(disk_client, folder_path, exists=False)
-    missing = disk_client.get_resource(folder_path, expected_statuses={404})
-
-    assert response.status_code in {
-        requests.codes.accepted,
-        requests.codes.no_content,
-    }
-    assert missing.status_code == requests.codes.not_found

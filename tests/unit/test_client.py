@@ -74,6 +74,38 @@ def test_create_folder_sends_put(client: YandexDiskClient, session: Mock) -> Non
     )
 
 
+def test_get_resource_sends_optional_query_parameters(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(200)
+
+    client.get_resource(
+        "disk:/folder",
+        fields="name,type",
+        limit=10,
+        offset=2,
+        preview_crop=True,
+        preview_size="S",
+        sort="-modified",
+    )
+
+    session.request.assert_called_once_with(
+        "GET",
+        f"{BASE_URL}/resources",
+        timeout=15.0,
+        params={
+            "path": "disk:/folder",
+            "fields": "name,type",
+            "limit": 10,
+            "offset": 2,
+            "preview_crop": "true",
+            "preview_size": "S",
+            "sort": "-modified",
+        },
+    )
+
+
 def test_copy_resource_sends_post(client: YandexDiskClient, session: Mock) -> None:
     session.request.return_value = make_response(201)
 
@@ -97,13 +129,41 @@ def test_delete_resource_sends_delete(
 ) -> None:
     session.request.return_value = make_response(204, "")
 
-    client.delete_resource("disk:/obsolete")
+    client.delete_resource(
+        "disk:/obsolete",
+        fields="href,method",
+        force_async=True,
+        md5="abc",
+        permanently=True,
+    )
 
     session.request.assert_called_once_with(
         "DELETE",
         f"{BASE_URL}/resources",
         timeout=15.0,
-        params={"path": "disk:/obsolete", "permanently": "true"},
+        params={
+            "path": "disk:/obsolete",
+            "fields": "href,method",
+            "force_async": "true",
+            "md5": "abc",
+            "permanently": "true",
+        },
+    )
+
+
+def test_delete_resource_omits_optional_parameters_by_default(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(204, "")
+
+    client.delete_resource("disk:/to-trash")
+
+    session.request.assert_called_once_with(
+        "DELETE",
+        f"{BASE_URL}/resources",
+        timeout=15.0,
+        params={"path": "disk:/to-trash"},
     )
 
 
