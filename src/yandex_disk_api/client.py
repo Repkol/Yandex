@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Collection
 from typing import Any
+from urllib.parse import quote
 
 import requests
 
@@ -638,3 +639,19 @@ class YandexDiskClient:
         if response.status_code not in expected_statuses:
             raise YandexDiskApiError("GET", operation_url, response)
         return response
+
+    def get_operation_status(
+        self,
+        operation_id: str | None,
+        *,
+        fields: str | None = None,
+        expected_statuses: Collection[int] = (200,),
+    ) -> requests.Response:
+        """GET the state of an asynchronous operation by its identifier."""
+        encoded_id = quote(operation_id or "", safe="")
+        return self._request(
+            "GET",
+            f"/operations/{encoded_id}",
+            expected_statuses=expected_statuses,
+            params=_query_params(fields=fields),
+        )

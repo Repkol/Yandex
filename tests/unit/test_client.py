@@ -787,6 +787,60 @@ def test_restore_trash_resource_omits_optional_parameters(
     )
 
 
+def test_get_operation_status_sends_id_and_fields(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(
+        200,
+        '{"status": "success"}',
+    )
+
+    client.get_operation_status("operation-id", fields="status")
+
+    session.request.assert_called_once_with(
+        "GET",
+        f"{BASE_URL}/operations/operation-id",
+        timeout=15.0,
+        params={"fields": "status"},
+    )
+
+
+def test_get_operation_status_encodes_path_segment(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(404)
+
+    client.get_operation_status(
+        "id/with space",
+        expected_statuses={404},
+    )
+
+    session.request.assert_called_once_with(
+        "GET",
+        f"{BASE_URL}/operations/id%2Fwith%20space",
+        timeout=15.0,
+        params={},
+    )
+
+
+def test_get_operation_status_without_id_uses_collection_endpoint(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(200, '{"items": []}')
+
+    client.get_operation_status(None)
+
+    session.request.assert_called_once_with(
+        "GET",
+        f"{BASE_URL}/operations/",
+        timeout=15.0,
+        params={},
+    )
+
+
 def test_unexpected_status_raises_readable_error(
     client: YandexDiskClient,
     session: Mock,
