@@ -21,12 +21,14 @@
 | GET | `/v1/disk/public/resources` | Публичные метаданные без OAuth, path, пагинация, `400/404` |
 | GET | `/v1/disk/public/resources/download` | Публичное скачивание без OAuth, вложенные файлы, `400/404` |
 | PATCH | `/v1/disk/resources` | Пользовательские свойства, merge/delete/no-op, `400/401/404/415` |
+| PATCH | `/v1/disk/public/resources/public-settings` | Настройки публичной ссылки, `fields`, Unicode, `400/401/404/415` |
 | PUT | `/v1/disk/resources` | Happy Path, вложенность, Unicode, `fields`, `400/401/409` |
 | PUT | `/v1/disk/resources/publish` | Публикация, настройки доступа, идемпотентность, `400/401/404/415` |
 | PUT | `/v1/disk/resources/unpublish` | Снятие публикации, идемпотентность, `400/401/404` |
 | POST | `/v1/disk/resources/copy` | Файл/папка, async, overwrite, Unicode, `400/401/404/409` |
 | POST | `/v1/disk/resources/move` | Файл/папка, async, overwrite, Unicode, `400/401/404/409` |
 | POST | `/v1/disk/resources/upload` | Импорт по URL, async, коллизии, Unicode, `400/401/409` |
+| POST | `/v1/disk/public/resources/save-to-disk` | Файл/папка, вложенный path, async, коллизии, `400/401/404` |
 | DELETE | `/v1/disk/resources` | Корзина и permanent delete, async, md5, `400/401/404/409` |
 
 Помимо интеграционных сценариев в проекте есть unit-тесты HTTP-клиента:
@@ -304,6 +306,49 @@ OAuth применяется только для подготовки и пос�
 детерминированно вызвать входными параметрами этих методов; его следует
 проверять на управляемом стенде или стабом ответа.
 
+### Матрица public-settings и save-to-disk
+
+| Ручка | Категория | Проверка | Ожидаемый результат |
+|---|---|---|---|
+| public-settings | Happy Path | Обновить `available_until` опубликованной папки | `200` и пустое тело |
+| public-settings | Позитивный | Настройки опубликованного файла | `200`, публичный файл остаётся доступен |
+| public-settings | Позитивный | Параметр `fields` | Запрос принят |
+| public-settings | Краевой | Unicode и пробелы в `path` | Путь корректно закодирован |
+| public-settings | Краевой | Повтор одинакового PATCH | Оба запроса успешны |
+| public-settings | Негативный | Пустой JSON-объект | `400 FieldOneRequiredValidationError` |
+| public-settings | Негативный | Body отсутствует | `400` |
+| public-settings | Негативный | Обязательный `path` отсутствует | `400 FieldValidationError` |
+| public-settings | Негативный | Ресурс отсутствует | `404 DiskNotFoundError` |
+| public-settings | Негативный | Ресурс ещё не опубликован | `400/404`, настройки не применены |
+| public-settings | Негативный | Body не объект или timestamp невалиден | `400` |
+| public-settings | Негативный | `Content-Type: text/plain` | `415 Unsupported Media Type` |
+| public-settings | Негативный | Невалидный OAuth-токен | `401`, публичная ссылка сохранена |
+| save-to-disk | Happy Path | Сохранить публичный файл в тестовую папку | `201/202`, совпадают `md5` и `size` |
+| save-to-disk | Позитивный | Сохранить публичную папку | Вложенная структура и содержимое сохранены |
+| save-to-disk | Позитивный | `public_url` вместо ключа | Ресурс успешно сохранён |
+| save-to-disk | Позитивный | Вложенный `path` публичной папки | Сохранён выбранный файл |
+| save-to-disk | Позитивный | `force_async=true` | `202`, операция завершается успешно |
+| save-to-disk | Позитивный | Параметр `fields` | Link содержит только запрошенные поля |
+| save-to-disk | Краевой | Unicode в `save_path` и `name` | Имя и содержимое не искажены |
+| save-to-disk | Краевой | Параметр `name` отсутствует | Сохраняется исходное имя |
+| save-to-disk | Краевой | Имя в целевой папке занято | `201`, копия получает суффикс ` (1)`, исходник не перезаписан |
+| save-to-disk | Негативный | `public_key` отсутствует или пуст | `400` |
+| save-to-disk | Негативный | Неизвестный ключ | `404` |
+| save-to-disk | Негативный | Вложенный публичный `path` отсутствует | `404` |
+| save-to-disk | Негативный | Целевая папка отсутствует | `404/409`, ресурс не создаётся |
+| save-to-disk | Негативный | Невалидный OAuth-токен | `401` |
+
+Позитивные проверки `public-settings` являются capability-aware: на аккаунте,
+поддерживающем расширенные публичные настройки, они строго требуют `200`.
+Текущий обычный аккаунт после успешной публикации отвечает для валидного PATCH
+`404 DiskNotFoundError`; только эти пять сценариев в таком окружении помечаются
+`SKIPPED`, а все детерминированные негативные проверки выполняются.
+
+Все `save-to-disk`-тесты явно передают `save_path` внутри временной песочницы,
+поэтому не затрагивают пользовательскую папку «Загрузки». Боевой API при занятом
+имени не возвращает перечисленный в полигоне `409`, а безопасно добавляет
+суффикс ` (1)`; тест закрепляет это фактическое поведение.
+
 ## Требования
 
 - Python 3.10 или новее;
@@ -381,7 +426,9 @@ ruff format --check .
 │   │   ├── test_public_resources.py
 │   │   ├── test_public_download.py
 │   │   ├── test_publish_resource.py
+│   │   ├── test_save_public_resource.py
 │   │   ├── test_update_resource.py
+│   │   ├── test_update_public_settings.py
 │   │   ├── test_unpublish_resource.py
 │   │   ├── test_upload_from_url.py
 │   │   └── test_resources.py

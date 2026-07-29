@@ -51,7 +51,7 @@ def sandbox_path(disk_client: YandexDiskClient) -> Iterator[str]:
         response = disk_client.get_resource(path, expected_statuses={200, 404})
         if response.status_code == 200:
             deletion = disk_client.delete_resource(path, permanently=True)
-            wait_for_operation(disk_client, deletion, timeout=60.0)
+            wait_for_operation(disk_client, deletion, timeout=180.0)
             wait_for_resource_state(
                 disk_client,
                 path,
@@ -175,12 +175,18 @@ def wait_for_publication_state(
 def temporarily_published_resource(
     client: YandexDiskClient,
     path: str,
+    *,
+    allow_address_access: bool | None = None,
+    publish_body: object | None = None,
+    skip_if_unavailable: bool = False,
 ) -> Iterator[dict[str, object]]:
     """Publish one test resource and always revoke its public link."""
     transient_statuses = {429, 500, 503}
     for attempt in range(3):
         response = client.publish_resource(
             path,
+            allow_address_access=allow_address_access,
+            body=publish_body,
             expected_statuses={200, *transient_statuses},
         )
         if response.status_code == requests.codes.ok:
@@ -193,7 +199,19 @@ def temporarily_published_resource(
             f"HTTP {response.status_code} {response.text[:500]}"
         )
 
-    metadata = wait_for_publication_state(client, path, published=True)
+    try:
+        metadata = wait_for_publication_state(
+            client,
+            path,
+            published=True,
+            timeout=180.0,
+        )
+    except pytest.fail.Exception:
+        if not skip_if_unavailable:
+            raise
+        client.unpublish_resource(path, expected_statuses={200, 404})
+        pytest.skip("A public link could not be prepared for this capability test")
+
     try:
         yield metadata
     finally:

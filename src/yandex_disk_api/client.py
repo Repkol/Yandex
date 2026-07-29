@@ -268,6 +268,62 @@ class YandexDiskClient:
             ),
         )
 
+    def update_public_settings(
+        self,
+        path: str | None,
+        body: object | None = None,
+        *,
+        fields: str | None = None,
+        content_type: str = "application/json",
+        expected_statuses: Collection[int] = (200,),
+    ) -> requests.Response:
+        """PATCH public access settings for an owned resource."""
+        request_body: dict[str, object] = {}
+        if body is not None:
+            if content_type == "application/json":
+                request_body["json"] = body
+            else:
+                request_body.update(
+                    {
+                        "data": body,
+                        "headers": {"Content-Type": content_type},
+                    }
+                )
+
+        return self._request(
+            "PATCH",
+            "/public/resources/public-settings",
+            expected_statuses=expected_statuses,
+            params=_query_params(path=path, fields=fields),
+            **request_body,
+        )
+
+    def save_public_resource_to_disk(
+        self,
+        public_key: str | None,
+        *,
+        fields: str | None = None,
+        force_async: bool | None = None,
+        name: str | None = None,
+        path: str | None = None,
+        save_path: str | None = None,
+        expected_statuses: Collection[int] = (201, 202),
+    ) -> requests.Response:
+        """POST a public resource copy into an owned Disk folder."""
+        return self._request(
+            "POST",
+            "/public/resources/save-to-disk",
+            expected_statuses=expected_statuses,
+            params=_query_params(
+                public_key=public_key,
+                fields=fields,
+                force_async=force_async,
+                name=name,
+                path=path,
+                save_path=save_path,
+            ),
+        )
+
     def create_folder(
         self,
         path: str | None,

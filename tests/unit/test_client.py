@@ -331,6 +331,84 @@ def test_get_public_download_link_sends_get(
     )
 
 
+def test_update_public_settings_sends_patch(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(200)
+    body = {"available_until": 0}
+
+    client.update_public_settings(
+        "disk:/shared",
+        body,
+        fields="available_until",
+    )
+
+    session.request.assert_called_once_with(
+        "PATCH",
+        f"{BASE_URL}/public/resources/public-settings",
+        timeout=15.0,
+        params={
+            "path": "disk:/shared",
+            "fields": "available_until",
+        },
+        json=body,
+    )
+
+
+def test_update_public_settings_can_send_unsupported_content_type(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(415)
+
+    client.update_public_settings(
+        "disk:/shared",
+        "not-json",
+        content_type="text/plain",
+        expected_statuses={415},
+    )
+
+    session.request.assert_called_once_with(
+        "PATCH",
+        f"{BASE_URL}/public/resources/public-settings",
+        timeout=15.0,
+        params={"path": "disk:/shared"},
+        data="not-json",
+        headers={"Content-Type": "text/plain"},
+    )
+
+
+def test_save_public_resource_to_disk_sends_all_parameters(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(202)
+
+    client.save_public_resource_to_disk(
+        "public-key",
+        fields="href,method",
+        force_async=True,
+        name="saved.txt",
+        path="/nested/source.txt",
+        save_path="disk:/api-tests/destination",
+    )
+
+    session.request.assert_called_once_with(
+        "POST",
+        f"{BASE_URL}/public/resources/save-to-disk",
+        timeout=15.0,
+        params={
+            "public_key": "public-key",
+            "fields": "href,method",
+            "force_async": "true",
+            "name": "saved.txt",
+            "path": "/nested/source.txt",
+            "save_path": "disk:/api-tests/destination",
+        },
+    )
+
+
 def test_copy_resource_sends_post(client: YandexDiskClient, session: Mock) -> None:
     session.request.return_value = make_response(201)
 
