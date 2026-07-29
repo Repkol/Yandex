@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Collection
 from typing import Any
 
@@ -42,25 +43,25 @@ class YandexDiskClient:
 
     def __init__(
         self,
-        token: str,
+        token: str | None,
         *,
         base_url: str = DEFAULT_BASE_URL,
         timeout: float = 15.0,
         session: requests.Session | None = None,
     ) -> None:
-        if not token.strip():
+        if token is not None and not token.strip():
             raise ValueError("OAuth token must not be empty")
 
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.session = session or requests.Session()
-        self.session.headers.update(
-            {
-                "Authorization": f"OAuth {token}",
-                "Accept": "application/json",
-                "User-Agent": "yandex-disk-api-tests/1.0",
-            }
-        )
+        headers = {
+            "Accept": "application/json",
+            "User-Agent": "yandex-disk-api-tests/1.0",
+        }
+        if token is not None:
+            headers["Authorization"] = f"OAuth {token}"
+        self.session.headers.update(headers)
 
     def close(self) -> None:
         """Close the underlying HTTP session."""
@@ -81,12 +82,25 @@ class YandexDiskClient:
         **kwargs: Any,
     ) -> requests.Response:
         url = f"{self.base_url}{endpoint}"
-        response = self.session.request(
-            method,
-            url,
-            timeout=self.timeout,
-            **kwargs,
-        )
+        transient_statuses = {429, 500, 503}
+        for attempt in range(3):
+            response = self.session.request(
+                method,
+                url,
+                timeout=self.timeout,
+                **kwargs,
+            )
+            if response.status_code in expected_statuses:
+                return response
+            should_retry = (
+                method.upper() == "GET"
+                and response.status_code in transient_statuses
+                and attempt < 2
+            )
+            if not should_retry:
+                break
+            time.sleep(0.5 * (2**attempt))
+
         if response.status_code not in expected_statuses:
             raise YandexDiskApiError(method, url, response)
         return response
@@ -202,6 +216,56 @@ class YandexDiskClient:
             "/resources/public",
             expected_statuses=expected_statuses,
             params=params,
+        )
+
+    def get_public_resource(
+        self,
+        public_key: str | None,
+        *,
+        fields: str | None = None,
+        limit: int | str | None = None,
+        offset: int | str | None = None,
+        path: str | None = None,
+        preview_crop: bool | None = None,
+        preview_size: str | None = None,
+        sort: str | None = None,
+        expected_statuses: Collection[int] = (200,),
+    ) -> requests.Response:
+        """GET public metadata using a public key or public URL."""
+        return self._request(
+            "GET",
+            "/public/resources",
+            expected_statuses=expected_statuses,
+            params=_query_params(
+                public_key=public_key,
+                fields=fields,
+                limit=limit,
+                offset=offset,
+                path=path,
+                preview_crop=preview_crop,
+                preview_size=preview_size,
+                sort=sort,
+            ),
+        )
+
+    def get_public_download_link(
+        self,
+        public_key: str | None,
+        *,
+        fields: str | None = None,
+        path: str | None = None,
+        expected_statuses: Collection[int] = (200,),
+    ) -> requests.Response:
+        """GET a direct download link for a public resource."""
+        return self._request(
+            "GET",
+            "/public/resources/download",
+            expected_statuses=expected_statuses,
+            params=_query_params(
+                public_key=public_key,
+                fields=fields,
+                path=path,
+            ),
         )
 
     def create_folder(

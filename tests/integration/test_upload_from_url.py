@@ -48,7 +48,7 @@ def assert_remote_file_uploaded(
     path: str,
 ) -> dict[str, object]:
     """Assert exact metadata for the immutable external fixture."""
-    wait_for_resource_state(client, path, exists=True, timeout=30.0)
+    wait_for_resource_state(client, path, exists=True, timeout=60.0)
     metadata = client.get_resource(path).json()
     assert metadata["path"] == path
     assert metadata["type"] == "file"
@@ -79,7 +79,7 @@ def test_upload_from_url_happy_path_imports_exact_file(
     )
 
     assert_operation_link(response)
-    wait_for_operation(disk_client, response, timeout=30.0)
+    wait_for_operation(disk_client, response, timeout=60.0)
     assert_remote_file_uploaded(disk_client, file_path)
     download_url = disk_client.get_download_link(file_path).json()["href"]
     download = requests.get(download_url, timeout=30)
@@ -104,7 +104,7 @@ def test_upload_from_url_fields_limits_operation_link(
         response,
         expected_fields={"href", "method"},
     )
-    wait_for_operation(disk_client, response, timeout=30.0)
+    wait_for_operation(disk_client, response, timeout=60.0)
     assert_remote_file_uploaded(disk_client, file_path)
 
 
@@ -122,7 +122,7 @@ def test_upload_from_url_supports_disable_redirects(
     )
 
     assert_operation_link(response)
-    wait_for_operation(disk_client, response, timeout=30.0)
+    wait_for_operation(disk_client, response, timeout=60.0)
     assert_remote_file_uploaded(disk_client, file_path)
 
 
@@ -139,7 +139,7 @@ def test_upload_from_url_supports_unicode_and_spaces(
     )
 
     assert_operation_link(response)
-    wait_for_operation(disk_client, response, timeout=30.0)
+    wait_for_operation(disk_client, response, timeout=60.0)
     metadata = assert_remote_file_uploaded(disk_client, file_path)
     assert metadata["name"] == file_path.rsplit("/", maxsplit=1)[1]
 
@@ -159,7 +159,7 @@ def test_upload_from_url_existing_file_creates_numbered_copy(
     )
 
     assert_operation_link(response)
-    operation = wait_for_operation_result(disk_client, response, timeout=30.0)
+    operation = wait_for_operation_result(disk_client, response, timeout=60.0)
     assert operation == {"status": "success"}
     imported = assert_remote_file_uploaded(disk_client, imported_path)
     after = disk_client.get_resource(file_path).json()
@@ -183,7 +183,7 @@ def test_upload_from_url_directory_collision_creates_numbered_file(
     )
 
     assert_operation_link(response)
-    operation = wait_for_operation_result(disk_client, response, timeout=30.0)
+    operation = wait_for_operation_result(disk_client, response, timeout=60.0)
     assert operation == {"status": "success"}
     imported = assert_remote_file_uploaded(disk_client, imported_path)
     assert disk_client.get_resource(folder_path).json()["type"] == "dir"

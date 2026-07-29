@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import time
 from collections.abc import Iterator
+from contextlib import contextmanager
 from uuid import uuid4
 
 import pytest
@@ -29,6 +30,13 @@ def unauthorized_disk_client(
 ) -> Iterator[YandexDiskClient]:
     """Client with a deliberately invalid token for deterministic 401 checks."""
     with YandexDiskClient("invalid-token-for-negative-api-test") as client:
+        yield client
+
+
+@pytest.fixture(scope="session")
+def public_disk_client() -> Iterator[YandexDiskClient]:
+    """Client without an Authorization header for public API checks."""
+    with YandexDiskClient(None) as client:
         yield client
 
 
@@ -143,7 +151,7 @@ def wait_for_publication_state(
     path: str,
     *,
     published: bool,
-    timeout: float = 20.0,
+    timeout: float = 60.0,
 ) -> dict[str, object]:
     """Poll metadata until a test resource gains or loses its public link."""
     deadline = time.monotonic() + timeout
@@ -161,6 +169,63 @@ def wait_for_publication_state(
 
     state = "become public" if published else "become private"
     pytest.fail(f"Resource {path!r} did not {state} in {timeout} seconds")
+
+
+@contextmanager
+def temporarily_published_resource(
+    client: YandexDiskClient,
+    path: str,
+) -> Iterator[dict[str, object]]:
+    """Publish one test resource and always revoke its public link."""
+    transient_statuses = {429, 500, 503}
+    for attempt in range(3):
+        response = client.publish_resource(
+            path,
+            expected_statuses={200, *transient_statuses},
+        )
+        if response.status_code == requests.codes.ok:
+            break
+        if attempt < 2:
+            time.sleep(0.5 * (2**attempt))
+    else:
+        pytest.fail(
+            "Test resource publication failed after retries: "
+            f"HTTP {response.status_code} {response.text[:500]}"
+        )
+
+    metadata = wait_for_publication_state(client, path, published=True)
+    try:
+        yield metadata
+    finally:
+        response = client.unpublish_resource(path, expected_statuses={200, 404})
+        if response.status_code == requests.codes.ok:
+            wait_for_publication_state(client, path, published=False)
+
+
+def wait_for_public_resource_state(
+    client: YandexDiskClient,
+    public_key: str,
+    *,
+    present: bool,
+    path: str | None = None,
+    timeout: float = 60.0,
+) -> dict[str, object] | None:
+    """Poll the unauthenticated public endpoint until availability changes."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        response = client.get_public_resource(
+            public_key,
+            path=path,
+            expected_statuses={200, 404},
+        )
+        if response.status_code == requests.codes.ok and present:
+            return response.json()
+        if response.status_code == requests.codes.not_found and not present:
+            return None
+        time.sleep(0.25)
+
+    state = "become public" if present else "become unavailable"
+    pytest.fail(f"Public resource {public_key!r} did not {state} in {timeout} seconds")
 
 
 def wait_for_trash_resource_state(

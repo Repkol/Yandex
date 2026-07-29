@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 import requests
@@ -48,6 +48,15 @@ def test_client_sets_safe_default_headers(session: Mock) -> None:
     }
 
 
+def test_public_client_omits_authorization_header(session: Mock) -> None:
+    YandexDiskClient(None, base_url=BASE_URL, session=session)
+
+    assert session.headers == {
+        "Accept": "application/json",
+        "User-Agent": "yandex-disk-api-tests/1.0",
+    }
+
+
 def test_get_disk_info_sends_get(client: YandexDiskClient, session: Mock) -> None:
     session.request.return_value = make_response(200, '{"total_space": 10}')
 
@@ -59,6 +68,23 @@ def test_get_disk_info_sends_get(client: YandexDiskClient, session: Mock) -> Non
         BASE_URL,
         timeout=15.0,
     )
+
+
+def test_get_retries_transient_service_error(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.side_effect = [
+        make_response(503),
+        make_response(200, '{"total_space": 10}'),
+    ]
+
+    with patch("yandex_disk_api.client.time.sleep") as sleep:
+        response = client.get_disk_info()
+
+    assert response.status_code == requests.codes.ok
+    assert session.request.call_count == 2
+    sleep.assert_called_once_with(0.5)
 
 
 def test_create_folder_sends_put(client: YandexDiskClient, session: Mock) -> None:
@@ -243,6 +269,64 @@ def test_list_public_resources_sends_all_query_parameters(
             "preview_crop": "true",
             "preview_size": "S",
             "type": "file",
+        },
+    )
+
+
+def test_get_public_resource_sends_all_query_parameters(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(200)
+
+    client.get_public_resource(
+        "public-key",
+        fields="name,_embedded.items.name",
+        limit=5,
+        offset=2,
+        path="/nested",
+        preview_crop=True,
+        preview_size="S",
+        sort="-name",
+    )
+
+    session.request.assert_called_once_with(
+        "GET",
+        f"{BASE_URL}/public/resources",
+        timeout=15.0,
+        params={
+            "public_key": "public-key",
+            "fields": "name,_embedded.items.name",
+            "limit": 5,
+            "offset": 2,
+            "path": "/nested",
+            "preview_crop": "true",
+            "preview_size": "S",
+            "sort": "-name",
+        },
+    )
+
+
+def test_get_public_download_link_sends_get(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(200)
+
+    client.get_public_download_link(
+        "public-key",
+        fields="href,method",
+        path="/nested/file.txt",
+    )
+
+    session.request.assert_called_once_with(
+        "GET",
+        f"{BASE_URL}/public/resources/download",
+        timeout=15.0,
+        params={
+            "public_key": "public-key",
+            "fields": "href,method",
+            "path": "/nested/file.txt",
         },
     )
 

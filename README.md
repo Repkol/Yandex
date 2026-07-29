@@ -18,6 +18,8 @@
 | GET | `/v1/disk/resources/files` | Плоский список, сортировка, пагинация, media type, `400/401` |
 | GET | `/v1/disk/resources/last-uploaded` | Последние файлы, порядок дат, media type, `400/401` |
 | GET | `/v1/disk/resources/public` | Публичные ресурсы, type, пагинация, `fields`, `400/401` |
+| GET | `/v1/disk/public/resources` | Публичные метаданные без OAuth, path, пагинация, `400/404` |
+| GET | `/v1/disk/public/resources/download` | Публичное скачивание без OAuth, вложенные файлы, `400/404` |
 | PATCH | `/v1/disk/resources` | Пользовательские свойства, merge/delete/no-op, `400/401/404/415` |
 | PUT | `/v1/disk/resources` | Happy Path, вложенность, Unicode, `fields`, `400/401/409` |
 | PUT | `/v1/disk/resources/publish` | Публикация, настройки доступа, идемпотентность, `400/401/404/415` |
@@ -236,6 +238,44 @@ POST-тесты импортируют файл из конкретного Git-
 добавляет новому файлу суффикс ` (1)`. Тесты отдельно проверяют коллизии
 с файлом и каталогом, а также сохранность исходного ресурса.
 
+### Матрица публичных metadata и download
+
+| Ручка | Категория | Проверка | Ожидаемый результат |
+|---|---|---|---|
+| public/resources | Happy Path | Метаданные опубликованной папки без OAuth | `200`, тип `dir`, вложенные ресурсы |
+| public/resources | Позитивный | `public_url` вместо `public_key` | Файл найден, `md5` и `size` совпадают |
+| public/resources | Позитивный | Метаданные публичного файла | Сохраняются `md5`, `sha256` и `size` |
+| public/resources | Позитивный | Параметр `fields` | Ограничены поля root/items |
+| public/resources | Позитивный | Вложенный `path` | Возвращён нужный файл внутри папки |
+| public/resources | Позитивный | `limit`, `offset`, `sort` | Корректные страницы и порядок по имени |
+| public/resources | Краевой | Unicode и пробелы во вложенном пути | Путь и имя не искажены |
+| public/resources | Краевой | `offset=1000000` | `200`, пустой `items` |
+| public/resources | Негативный | Нечисловой `limit` или `offset` | `400` и стандартная схема ошибки |
+| public/resources | Негативный | Ключ отсутствует или пуст | `400` |
+| public/resources | Негативный | Неизвестный непустой ключ | `404 DiskNotFoundError` |
+| public/resources | Негативный | Вложенный `path` отсутствует | `404` |
+| public/resources | Краевой | Ключ отозван через unpublish | Публичные метаданные получают `404` |
+| public download | Happy Path | Скачивание файла только по ключу | Link `200`, байты полностью совпадают |
+| public download | Позитивный | `public_url` вместо ключа | Файл успешно скачан |
+| public download | Позитивный | Вложенный файл через `path` | Скачаны байты выбранного файла |
+| public download | Позитивный | Параметр `fields` | Ограниченный Link остаётся рабочим |
+| public download | Краевой | Unicode и пробелы во вложенном пути | Содержимое скачано без искажений |
+| public download | Краевой | Пустой файл | Рабочая ссылка и тело длиной 0 |
+| public download | Краевой | Публичная папка | Прямая ссылка возвращает ZIP-архив |
+| public download | Негативный | Ключ отсутствует или пуст | `400` |
+| public download | Негативный | Неизвестный непустой ключ | `404 DiskNotFoundError` |
+| public download | Негативный | Вложенный файл отсутствует | `404` |
+| public download | Краевой | Ключ отозван через unpublish | Download endpoint получает `404` |
+
+Обе публичные ручки вызываются клиентом без заголовка Authorization.
+OAuth применяется только для подготовки и последующей очистки временных
+ресурсов. Прямые ссылки также скачиваются отдельной сессией без OAuth.
+
+Боевой API всегда добавляет `_embedded.public_key` в ответ каталога,
+даже если это поле не указано в `fields`. Кроме того, произвольная
+непустая строка считается допустимым форматом ключа и получает `404`;
+`400` возвращается для отсутствующего или явно пустого значения.
+
 ### Матрица сценариев files и last-uploaded
 
 | Ручка | Категория | Проверка | Ожидаемый результат |
@@ -333,11 +373,13 @@ ruff format --check .
 │   │   ├── test_delete_resource.py
 │   │   ├── test_download_resource.py
 │   │   ├── test_get_resource.py
+│   │   ├── test_get_public_resource.py
 │   │   ├── test_get_upload_link.py
 │   │   ├── test_last_uploaded.py
 │   │   ├── test_list_files.py
 │   │   ├── test_move_resource.py
 │   │   ├── test_public_resources.py
+│   │   ├── test_public_download.py
 │   │   ├── test_publish_resource.py
 │   │   ├── test_update_resource.py
 │   │   ├── test_unpublish_resource.py
