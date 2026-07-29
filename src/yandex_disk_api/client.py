@@ -553,32 +553,50 @@ class YandexDiskClient:
 
     def get_trash_resource(
         self,
-        path: str,
+        path: str | None = None,
         *,
-        limit: int | None = None,
-        offset: int | None = None,
+        fields: str | None = None,
+        limit: int | str | None = None,
+        offset: int | str | None = None,
+        preview_crop: bool | None = None,
+        preview_size: str | None = None,
+        sort: str | None = None,
         expected_statuses: Collection[int] = (200,),
     ) -> requests.Response:
-        """GET metadata for a resource moved to the Trash."""
+        """GET the Trash root or metadata for one trashed resource."""
         return self._request(
             "GET",
             "/trash/resources",
             expected_statuses=expected_statuses,
-            params=_query_params(path=path, limit=limit, offset=offset),
+            params=_query_params(
+                path=path,
+                fields=fields,
+                limit=limit,
+                offset=offset,
+                preview_crop=preview_crop,
+                preview_size=preview_size,
+                sort=sort,
+            ),
         )
 
     def delete_trash_resource(
         self,
-        path: str,
+        path: str | None = None,
         *,
-        force_async: bool = True,
+        fields: str | None = None,
+        force_async: bool | str | None = None,
+        expected_statuses: Collection[int] = (202, 204),
     ) -> requests.Response:
-        """Permanently DELETE one test resource from the Trash."""
+        """Permanently DELETE one resource or the complete Trash."""
         return self._request(
             "DELETE",
             "/trash/resources",
-            expected_statuses={202, 204},
-            params=_query_params(path=path, force_async=force_async),
+            expected_statuses=expected_statuses,
+            params=_query_params(
+                path=path,
+                fields=fields,
+                force_async=force_async,
+            ),
         )
 
     def get_operation(

@@ -86,8 +86,20 @@ def upload_test_file(
     content: bytes,
 ) -> dict[str, object]:
     """Upload a small fixture file and return its resource metadata."""
-    upload_url = client.get_upload_link(path).json()["href"]
-    upload = requests.put(upload_url, data=content, timeout=client.timeout)
+    for attempt in range(3):
+        upload_url = client.get_upload_link(path, overwrite=True).json()["href"]
+        try:
+            upload = requests.put(
+                upload_url,
+                data=content,
+                timeout=client.timeout,
+            )
+            break
+        except requests.exceptions.ConnectTimeout:
+            if attempt == 2:
+                raise
+            time.sleep(0.5 * (2**attempt))
+
     assert upload.status_code == requests.codes.created
     return client.get_resource(path).json()
 
@@ -132,7 +144,7 @@ def wait_for_resource_state(
     path: str,
     *,
     exists: bool,
-    timeout: float = 15.0,
+    timeout: float = 60.0,
 ) -> None:
     """Poll resource metadata until it appears or disappears."""
     deadline = time.monotonic() + timeout
@@ -151,7 +163,7 @@ def wait_for_publication_state(
     path: str,
     *,
     published: bool,
-    timeout: float = 60.0,
+    timeout: float = 180.0,
 ) -> dict[str, object]:
     """Poll metadata until a test resource gains or loses its public link."""
     deadline = time.monotonic() + timeout

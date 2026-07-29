@@ -654,6 +654,95 @@ def test_delete_resource_omits_optional_parameters_by_default(
     )
 
 
+def test_get_trash_resource_sends_all_parameters(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(200)
+
+    client.get_trash_resource(
+        "trash:/removed",
+        fields="path,name",
+        limit=10,
+        offset=20,
+        preview_crop=True,
+        preview_size="M",
+        sort="-deleted",
+    )
+
+    session.request.assert_called_once_with(
+        "GET",
+        f"{BASE_URL}/trash/resources",
+        timeout=15.0,
+        params={
+            "path": "trash:/removed",
+            "fields": "path,name",
+            "limit": 10,
+            "offset": 20,
+            "preview_crop": "true",
+            "preview_size": "M",
+            "sort": "-deleted",
+        },
+    )
+
+
+def test_get_trash_root_omits_path(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(200)
+
+    client.get_trash_resource()
+
+    session.request.assert_called_once_with(
+        "GET",
+        f"{BASE_URL}/trash/resources",
+        timeout=15.0,
+        params={},
+    )
+
+
+def test_delete_trash_resource_sends_all_parameters(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(202)
+
+    client.delete_trash_resource(
+        "trash:/removed",
+        fields="href,method",
+        force_async=True,
+    )
+
+    session.request.assert_called_once_with(
+        "DELETE",
+        f"{BASE_URL}/trash/resources",
+        timeout=15.0,
+        params={
+            "path": "trash:/removed",
+            "fields": "href,method",
+            "force_async": "true",
+        },
+    )
+
+
+def test_delete_trash_root_omits_path_without_live_request(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    """The destructive whole-Trash request is covered without calling the API."""
+    session.request.return_value = make_response(204, "")
+
+    client.delete_trash_resource()
+
+    session.request.assert_called_once_with(
+        "DELETE",
+        f"{BASE_URL}/trash/resources",
+        timeout=15.0,
+        params={},
+    )
+
+
 def test_unexpected_status_raises_readable_error(
     client: YandexDiskClient,
     session: Mock,
