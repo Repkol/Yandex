@@ -160,16 +160,46 @@ def test_get_resource_sends_optional_query_parameters(
 def test_copy_resource_sends_post(client: YandexDiskClient, session: Mock) -> None:
     session.request.return_value = make_response(201)
 
-    client.copy_resource("disk:/source", "disk:/copy")
+    client.copy_resource(
+        "disk:/source",
+        "disk:/copy",
+        fields="href,method",
+        force_async=True,
+        overwrite=True,
+    )
 
     session.request.assert_called_once_with(
         "POST",
         f"{BASE_URL}/resources/copy",
         timeout=15.0,
         params={
-            "from": "disk:/source",
             "path": "disk:/copy",
-            "overwrite": "false",
+            "fields": "href,method",
+            "force_async": "true",
+            "overwrite": "true",
+            "from": "disk:/source",
+        },
+    )
+
+
+def test_get_download_link_sends_get(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(200)
+
+    client.get_download_link(
+        "disk:/fixture.txt",
+        fields="href,method",
+    )
+
+    session.request.assert_called_once_with(
+        "GET",
+        f"{BASE_URL}/resources/download",
+        timeout=15.0,
+        params={
+            "path": "disk:/fixture.txt",
+            "fields": "href,method",
         },
     )
 

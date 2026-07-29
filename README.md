@@ -13,9 +13,10 @@
 |---|---|---|
 | GET | `/v1/disk` | Получение данных о Диске и проверка схемы ответа |
 | GET | `/v1/disk/resources` | Happy Path, `fields`, пагинация, Unicode, `400/401/404` |
+| GET | `/v1/disk/resources/download` | Прямая ссылка, байты файла, ZIP каталога, `400/401/404` |
 | PATCH | `/v1/disk/resources` | Пользовательские свойства, merge/delete/no-op, `400/401/404/415` |
 | PUT | `/v1/disk/resources` | Happy Path, вложенность, Unicode, `fields`, `400/401/409` |
-| POST | `/v1/disk/resources/copy` | Копирование папки и проверка результата |
+| POST | `/v1/disk/resources/copy` | Файл/папка, async, overwrite, Unicode, `400/401/404/409` |
 | DELETE | `/v1/disk/resources` | Корзина и permanent delete, async, md5, `400/401/404/409` |
 
 Помимо интеграционных сценариев в проекте есть unit-тесты HTTP-клиента:
@@ -87,6 +88,36 @@ API, но намеренно не провоцируются live-тестами
 `409 DiskPathDoesntExistsError`, если прямой родитель не существует.
 Тесты закрепляют фактический контракт сервиса.
 
+### Матрица сценариев copy и download
+
+| Ручка | Категория | Проверка | Ожидаемый результат |
+|---|---|---|---|
+| copy | Happy Path | Копирование папки в свободный путь | `201/202`, новая папка доступна |
+| copy | Позитивный | Копирование файла | Совпадают `md5` и `size` |
+| copy | Позитивный | Папка с вложенным каталогом | Вложенное содержимое скопировано |
+| copy | Позитивный | `force_async=true` | `202`, операция успешно завершается |
+| copy | Позитивный | Параметр `fields` | Link содержит только запрошенные поля |
+| copy | Позитивный | `overwrite=true` | Существующий файл заменён источником |
+| copy | Краевой | Unicode и пробелы в обоих путях | Пути сохраняются без искажений |
+| copy | Негативный | Результат уже существует без overwrite | `409`, результат не изменён |
+| copy | Негативный | Источник отсутствует | `404 DiskNotFoundError` |
+| copy | Негативный | Родитель результата отсутствует | `409 DiskPathDoesntExistsError` |
+| copy | Негативный | Нет обязательного `from` | `400 FieldValidationError` |
+| copy | Негативный | Нет обязательного `path` | `400 FieldValidationError` |
+| copy | Негативный | Невалидный OAuth-токен | `401`, копия не создаётся |
+| download | Happy Path | Скачать файл по временной ссылке | `200`, байты полностью совпадают |
+| download | Позитивный | Параметр `fields` | Link содержит только запрошенные поля |
+| download | Краевой | Unicode и пробелы в пути | Скачивается исходное содержимое |
+| download | Краевой | Пустой файл | Валидная ссылка и тело длиной 0 |
+| download | Краевой | Скачивание каталога | `200`, ссылка отдаёт корректный ZIP |
+| download | Негативный | Нет обязательного `path` | `400 FieldValidationError` |
+| download | Негативный | Файл отсутствует | `404 DiskNotFoundError` |
+| download | Негативный | Невалидный OAuth-токен | `401 UnauthorizedError` |
+
+Хотя описание download говорит о ссылке для файла, боевой API также
+принимает путь к каталогу и формирует временную ссылку на ZIP-архив.
+Тест скачивает этот архив без OAuth-заголовка и проверяет его формат.
+
 ## Требования
 
 - Python 3.10 или новее;
@@ -151,8 +182,10 @@ ruff format --check .
 ├── tests/
 │   ├── integration/
 │   │   ├── conftest.py
+│   │   ├── test_copy_resource.py
 │   │   ├── test_create_folder.py
 │   │   ├── test_delete_resource.py
+│   │   ├── test_download_resource.py
 │   │   ├── test_get_resource.py
 │   │   ├── test_update_resource.py
 │   │   └── test_resources.py

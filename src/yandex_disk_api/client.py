@@ -167,21 +167,44 @@ class YandexDiskClient:
 
     def copy_resource(
         self,
-        source_path: str,
-        destination_path: str,
+        source_path: str | None,
+        destination_path: str | None,
         *,
-        overwrite: bool = False,
+        fields: str | None = None,
+        force_async: bool | None = None,
+        overwrite: bool | None = None,
+        expected_statuses: Collection[int] = (201, 202),
     ) -> requests.Response:
         """POST a request to copy a file or directory."""
+        params = _query_params(
+            path=destination_path,
+            fields=fields,
+            force_async=force_async,
+            overwrite=overwrite,
+        )
+        if source_path is not None:
+            params["from"] = source_path
+
         return self._request(
             "POST",
             "/resources/copy",
-            expected_statuses={201, 202},
-            params={
-                "from": source_path,
-                "path": destination_path,
-                "overwrite": str(overwrite).lower(),
-            },
+            expected_statuses=expected_statuses,
+            params=params,
+        )
+
+    def get_download_link(
+        self,
+        path: str | None,
+        *,
+        fields: str | None = None,
+        expected_statuses: Collection[int] = (200,),
+    ) -> requests.Response:
+        """GET a temporary direct download link for a file."""
+        return self._request(
+            "GET",
+            "/resources/download",
+            expected_statuses=expected_statuses,
+            params=_query_params(path=path, fields=fields),
         )
 
     def delete_resource(
