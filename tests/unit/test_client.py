@@ -348,6 +348,56 @@ def test_publication_methods_send_put(
     )
 
 
+def test_publish_resource_sends_settings_and_address_access(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(200)
+    body = {"public_settings": {"read_only": True}}
+
+    client.publish_resource(
+        "disk:/public-resource",
+        allow_address_access=True,
+        fields="href,method",
+        body=body,
+    )
+
+    session.request.assert_called_once_with(
+        "PUT",
+        f"{BASE_URL}/resources/publish",
+        timeout=15.0,
+        params={
+            "path": "disk:/public-resource",
+            "allow_address_access": "true",
+            "fields": "href,method",
+        },
+        json=body,
+    )
+
+
+def test_publish_resource_can_send_unsupported_content_type(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(415)
+
+    client.publish_resource(
+        "disk:/public-resource",
+        body="not-json",
+        content_type="text/plain",
+        expected_statuses={415},
+    )
+
+    session.request.assert_called_once_with(
+        "PUT",
+        f"{BASE_URL}/resources/publish",
+        timeout=15.0,
+        params={"path": "disk:/public-resource"},
+        data="not-json",
+        headers={"Content-Type": "text/plain"},
+    )
+
+
 def test_delete_resource_sends_delete(
     client: YandexDiskClient,
     session: Mock,

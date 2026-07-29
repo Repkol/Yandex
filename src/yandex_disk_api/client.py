@@ -317,22 +317,42 @@ class YandexDiskClient:
 
     def publish_resource(
         self,
-        path: str,
+        path: str | None,
         *,
+        allow_address_access: bool | None = None,
         fields: str | None = None,
+        body: object | None = None,
+        content_type: str = "application/json",
         expected_statuses: Collection[int] = (200,),
     ) -> requests.Response:
-        """PUT a public link on one test resource."""
+        """PUT a public link and optional public settings on a resource."""
+        request_body: dict[str, object] = {}
+        if body is not None:
+            if content_type == "application/json":
+                request_body["json"] = body
+            else:
+                request_body.update(
+                    {
+                        "data": body,
+                        "headers": {"Content-Type": content_type},
+                    }
+                )
+
         return self._request(
             "PUT",
             "/resources/publish",
             expected_statuses=expected_statuses,
-            params=_query_params(path=path, fields=fields),
+            params=_query_params(
+                path=path,
+                allow_address_access=allow_address_access,
+                fields=fields,
+            ),
+            **request_body,
         )
 
     def unpublish_resource(
         self,
-        path: str,
+        path: str | None,
         *,
         fields: str | None = None,
         expected_statuses: Collection[int] = (200,),

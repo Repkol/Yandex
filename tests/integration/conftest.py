@@ -126,6 +126,31 @@ def wait_for_resource_state(
     pytest.fail(f"Resource {path!r} did not {expected} in {timeout} seconds")
 
 
+def wait_for_publication_state(
+    client: YandexDiskClient,
+    path: str,
+    *,
+    published: bool,
+    timeout: float = 20.0,
+) -> dict[str, object]:
+    """Poll metadata until a test resource gains or loses its public link."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        metadata = client.get_resource(
+            path,
+            fields="path,public_key,public_url",
+        ).json()
+        has_public_link = bool(
+            metadata.get("public_key") and metadata.get("public_url")
+        )
+        if has_public_link is published:
+            return metadata
+        time.sleep(0.25)
+
+    state = "become public" if published else "become private"
+    pytest.fail(f"Resource {path!r} did not {state} in {timeout} seconds")
+
+
 def wait_for_trash_resource_state(
     client: YandexDiskClient,
     path: str,
