@@ -106,9 +106,23 @@ class YandexDiskClient:
             raise YandexDiskApiError(method, url, response)
         return response
 
-    def get_disk_info(self) -> requests.Response:
+    def get_disk_info(
+        self,
+        *,
+        extra_fields: str | None = None,
+        fields: str | None = None,
+        expected_statuses: Collection[int] = (200,),
+    ) -> requests.Response:
         """GET information about the authenticated user's Disk."""
-        return self._request("GET", "", expected_statuses={200})
+        return self._request(
+            "GET",
+            "",
+            expected_statuses=expected_statuses,
+            params=_query_params(
+                extra_fields=extra_fields,
+                fields=fields,
+            ),
+        )
 
     def get_resource(
         self,

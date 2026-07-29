@@ -57,17 +57,60 @@ def test_public_client_omits_authorization_header(session: Mock) -> None:
     }
 
 
-def test_get_disk_info_sends_get(client: YandexDiskClient, session: Mock) -> None:
+def test_get_disk_info_sends_query_parameters(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
     session.request.return_value = make_response(200, '{"total_space": 10}')
 
-    response = client.get_disk_info()
+    response = client.get_disk_info(
+        extra_fields="disk_size",
+        fields="total_space,used_space",
+    )
 
     assert response.json()["total_space"] == 10
     session.request.assert_called_once_with(
         "GET",
         BASE_URL,
         timeout=15.0,
+        params={
+            "extra_fields": "disk_size",
+            "fields": "total_space,used_space",
+        },
     )
+
+
+def test_get_disk_info_omits_optional_parameters(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(200)
+
+    client.get_disk_info()
+
+    session.request.assert_called_once_with(
+        "GET",
+        BASE_URL,
+        timeout=15.0,
+        params={},
+    )
+
+
+def test_get_disk_info_can_return_expected_error_for_negative_case(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(
+        400,
+        '{"error": "FieldValidationError"}',
+    )
+
+    response = client.get_disk_info(
+        fields="invalid",
+        expected_statuses={400},
+    )
+
+    assert response.status_code == requests.codes.bad_request
 
 
 def test_get_retries_transient_service_error(
