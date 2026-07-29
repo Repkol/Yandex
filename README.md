@@ -14,6 +14,7 @@
 | GET | `/v1/disk` | Получение данных о Диске и проверка схемы ответа |
 | GET | `/v1/disk/resources` | Happy Path, `fields`, пагинация, Unicode, `400/401/404` |
 | GET | `/v1/disk/resources/download` | Прямая ссылка, байты файла, ZIP каталога, `400/401/404` |
+| GET | `/v1/disk/resources/upload` | Ссылка и PUT байтов, overwrite, Unicode, `400/401/409` |
 | GET | `/v1/disk/resources/files` | Плоский список, сортировка, пагинация, media type, `400/401` |
 | GET | `/v1/disk/resources/last-uploaded` | Последние файлы, порядок дат, media type, `400/401` |
 | GET | `/v1/disk/resources/public` | Публичные ресурсы, type, пагинация, `fields`, `400/401` |
@@ -23,6 +24,7 @@
 | PUT | `/v1/disk/resources/unpublish` | Снятие публикации, идемпотентность, `400/401/404` |
 | POST | `/v1/disk/resources/copy` | Файл/папка, async, overwrite, Unicode, `400/401/404/409` |
 | POST | `/v1/disk/resources/move` | Файл/папка, async, overwrite, Unicode, `400/401/404/409` |
+| POST | `/v1/disk/resources/upload` | Импорт по URL, async, коллизии, Unicode, `400/401/409` |
 | DELETE | `/v1/disk/resources` | Корзина и permanent delete, async, md5, `400/401/404/409` |
 
 Помимо интеграционных сценариев в проекте есть unit-тесты HTTP-клиента:
@@ -199,6 +201,41 @@ Unpublish также идемпотентен для существующего 
 сценарии, в которых проверка завершилась неуспешно. Настройки
 `read_only=true` не предоставляют публичный доступ на запись.
 
+### Матрица сценариев GET и POST upload
+
+| Метод | Категория | Проверка | Ожидаемый результат |
+|---|---|---|---|
+| GET | Happy Path | Получение URL и PUT точных байтов | Link `200`, загрузка `201`, совпадают `md5` и `size` |
+| GET | Позитивный | Параметр `fields` | Link ограничен полями, URL остаётся рабочим |
+| GET | Позитивный | `overwrite=true` | Существующий файл полностью заменён |
+| GET | Краевой | Unicode и пробелы в пути | Путь и имя не искажены |
+| GET | Краевой | Пустой файл | Создан файл размера 0 с корректным `md5` |
+| GET | Негативный | Файл существует, overwrite не задан | `409`, исходные данные сохранены |
+| GET | Негативный | Нет обязательного `path` | `400 FieldValidationError` |
+| GET | Негативный | Прямой родитель отсутствует | `409 DiskPathDoesntExistsError` |
+| GET | Негативный | Попытка заменить каталог файлом | `409`, каталог сохранён |
+| GET | Негативный | Невалидный OAuth-токен | `401 UnauthorizedError` |
+| POST | Happy Path | Импорт неизменяемого публичного файла | `202`, операция success, точные байты загружены |
+| POST | Позитивный | Параметр `fields` | Ограниченный Link сохраняет URL операции |
+| POST | Позитивный | `disable_redirects=true` для прямого URL | Импорт успешно завершается |
+| POST | Краевой | Unicode и пробелы в пути | Путь и имя не искажены |
+| POST | Краевой | Путь занят файлом | Исходный файл сохранён, импорт создан как `name (1).ext` |
+| POST | Краевой | Путь занят каталогом | Каталог сохранён, импорт создан рядом как `name (1)` |
+| POST | Негативный | Нет обязательного `path` или `url` | `400 FieldValidationError` |
+| POST | Негативный | URL не является абсолютным | `400` и стандартная схема ошибки |
+| POST | Негативный | Прямой родитель отсутствует | `409 DiskPathDoesntExistsError` |
+| POST | Негативный | Невалидный OAuth-токен | `401 UnauthorizedError` |
+
+При GET upload OAuth используется только для получения временной ссылки:
+PUT с содержимым выполняется отдельной сессией без передачи OAuth-заголовка.
+POST-тесты импортируют файл из конкретного Git-коммита, поэтому внешний
+контент неизменяем и его хеш можно проверять точно.
+
+Для POST полигон перечисляет `409` при занятом пути, однако боевой API
+принимает запрос с `202`, завершает операцию успешно и автоматически
+добавляет новому файлу суффикс ` (1)`. Тесты отдельно проверяют коллизии
+с файлом и каталогом, а также сохранность исходного ресурса.
+
 ### Матрица сценариев files и last-uploaded
 
 | Ручка | Категория | Проверка | Ожидаемый результат |
@@ -296,6 +333,7 @@ ruff format --check .
 │   │   ├── test_delete_resource.py
 │   │   ├── test_download_resource.py
 │   │   ├── test_get_resource.py
+│   │   ├── test_get_upload_link.py
 │   │   ├── test_last_uploaded.py
 │   │   ├── test_list_files.py
 │   │   ├── test_move_resource.py
@@ -303,6 +341,7 @@ ruff format --check .
 │   │   ├── test_publish_resource.py
 │   │   ├── test_update_resource.py
 │   │   ├── test_unpublish_resource.py
+│   │   ├── test_upload_from_url.py
 │   │   └── test_resources.py
 │   └── unit/
 │       └── test_client.py

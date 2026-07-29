@@ -398,6 +398,56 @@ def test_publish_resource_can_send_unsupported_content_type(
     )
 
 
+def test_get_upload_link_sends_all_query_parameters(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(200)
+
+    client.get_upload_link(
+        "disk:/upload.txt",
+        fields="href,method",
+        overwrite=True,
+    )
+
+    session.request.assert_called_once_with(
+        "GET",
+        f"{BASE_URL}/resources/upload",
+        timeout=15.0,
+        params={
+            "path": "disk:/upload.txt",
+            "fields": "href,method",
+            "overwrite": "true",
+        },
+    )
+
+
+def test_upload_resource_from_url_sends_post(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(202)
+
+    client.upload_resource_from_url(
+        "disk:/remote.txt",
+        "https://example.test/source.txt",
+        disable_redirects=True,
+        fields="href,method",
+    )
+
+    session.request.assert_called_once_with(
+        "POST",
+        f"{BASE_URL}/resources/upload",
+        timeout=15.0,
+        params={
+            "path": "disk:/remote.txt",
+            "url": "https://example.test/source.txt",
+            "disable_redirects": "true",
+            "fields": "href,method",
+        },
+    )
+
+
 def test_delete_resource_sends_delete(
     client: YandexDiskClient,
     session: Mock,

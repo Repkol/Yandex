@@ -91,17 +91,29 @@ def wait_for_operation(
     timeout: float = 15.0,
 ) -> None:
     """Wait when a resource-changing endpoint returns HTTP 202."""
-    if response.status_code != 202:
+    operation = wait_for_operation_result(client, response, timeout=timeout)
+    if operation is None:
         return
+    if operation["status"] == "failed":
+        pytest.fail(f"Yandex.Disk operation failed: {operation}")
+
+
+def wait_for_operation_result(
+    client: YandexDiskClient,
+    response: requests.Response,
+    *,
+    timeout: float = 15.0,
+) -> dict[str, object] | None:
+    """Return the terminal payload for an asynchronous operation."""
+    if response.status_code != 202:
+        return None
 
     operation_url = response.json()["href"]
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         operation = client.get_operation(operation_url).json()
-        if operation["status"] == "success":
-            return
-        if operation["status"] == "failed":
-            pytest.fail(f"Yandex.Disk operation failed: {operation}")
+        if operation["status"] in {"success", "failed"}:
+            return operation
         time.sleep(0.25)
 
     pytest.fail(f"Yandex.Disk operation did not finish in {timeout} seconds")

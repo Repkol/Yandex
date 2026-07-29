@@ -391,16 +391,44 @@ class YandexDiskClient:
 
     def get_upload_link(
         self,
-        path: str,
+        path: str | None,
         *,
-        overwrite: bool = True,
+        fields: str | None = None,
+        overwrite: bool | None = None,
+        expected_statuses: Collection[int] = (200,),
     ) -> requests.Response:
-        """GET a one-time URL used by test fixtures to upload a file."""
+        """GET a temporary URL used to upload local file content."""
         return self._request(
             "GET",
             "/resources/upload",
-            expected_statuses={200},
-            params=_query_params(path=path, overwrite=overwrite),
+            expected_statuses=expected_statuses,
+            params=_query_params(
+                path=path,
+                fields=fields,
+                overwrite=overwrite,
+            ),
+        )
+
+    def upload_resource_from_url(
+        self,
+        path: str | None,
+        source_url: str | None,
+        *,
+        disable_redirects: bool | None = None,
+        fields: str | None = None,
+        expected_statuses: Collection[int] = (202,),
+    ) -> requests.Response:
+        """POST an asynchronous import from an external URL."""
+        return self._request(
+            "POST",
+            "/resources/upload",
+            expected_statuses=expected_statuses,
+            params=_query_params(
+                path=path,
+                url=source_url,
+                disable_redirects=disable_redirects,
+                fields=fields,
+            ),
         )
 
     def get_trash_resource(
