@@ -123,13 +123,46 @@ class YandexDiskClient:
             ),
         )
 
-    def create_folder(self, path: str) -> requests.Response:
+    def create_folder(
+        self,
+        path: str | None,
+        *,
+        fields: str | None = None,
+        expected_statuses: Collection[int] = (201,),
+    ) -> requests.Response:
         """PUT a new directory at ``path``."""
         return self._request(
             "PUT",
             "/resources",
-            expected_statuses={201},
-            params={"path": path},
+            expected_statuses=expected_statuses,
+            params=_query_params(path=path, fields=fields),
+        )
+
+    def update_resource(
+        self,
+        path: str | None,
+        body: object,
+        *,
+        fields: str | None = None,
+        content_type: str = "application/json",
+        expected_statuses: Collection[int] = (200,),
+    ) -> requests.Response:
+        """PATCH user-defined resource properties."""
+        request_body: dict[str, object]
+        if content_type == "application/json":
+            request_body = {"json": body}
+        else:
+            request_body = {
+                "data": body,
+                "headers": {"Content-Type": content_type},
+            }
+
+        return self._request(
+            "PATCH",
+            "/resources",
+            expected_statuses=expected_statuses,
+            params=_query_params(path=path, fields=fields),
+            **request_body,
         )
 
     def copy_resource(

@@ -43,7 +43,13 @@ def sandbox_path(disk_client: YandexDiskClient) -> Iterator[str]:
         response = disk_client.get_resource(path, expected_statuses={200, 404})
         if response.status_code == 200:
             deletion = disk_client.delete_resource(path, permanently=True)
-            wait_for_operation(disk_client, deletion)
+            wait_for_operation(disk_client, deletion, timeout=60.0)
+            wait_for_resource_state(
+                disk_client,
+                path,
+                exists=False,
+                timeout=60.0,
+            )
 
 
 def unique_child(parent: str, prefix: str) -> str:

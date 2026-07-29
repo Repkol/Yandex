@@ -64,13 +64,64 @@ def test_get_disk_info_sends_get(client: YandexDiskClient, session: Mock) -> Non
 def test_create_folder_sends_put(client: YandexDiskClient, session: Mock) -> None:
     session.request.return_value = make_response(201)
 
-    client.create_folder("disk:/api-tests/new")
+    client.create_folder("disk:/api-tests/new", fields="href,method")
 
     session.request.assert_called_once_with(
         "PUT",
         f"{BASE_URL}/resources",
         timeout=15.0,
-        params={"path": "disk:/api-tests/new"},
+        params={
+            "path": "disk:/api-tests/new",
+            "fields": "href,method",
+        },
+    )
+
+
+def test_update_resource_sends_patch_with_json_body(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(200)
+    body = {"custom_properties": {"status": "ready"}}
+
+    client.update_resource(
+        "disk:/api-tests/resource",
+        body,
+        fields="path,custom_properties",
+    )
+
+    session.request.assert_called_once_with(
+        "PATCH",
+        f"{BASE_URL}/resources",
+        timeout=15.0,
+        params={
+            "path": "disk:/api-tests/resource",
+            "fields": "path,custom_properties",
+        },
+        json=body,
+    )
+
+
+def test_update_resource_can_send_unsupported_content_type_for_negative_case(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(415)
+
+    client.update_resource(
+        "disk:/api-tests/resource",
+        "{}",
+        content_type="text/plain",
+        expected_statuses={415},
+    )
+
+    session.request.assert_called_once_with(
+        "PATCH",
+        f"{BASE_URL}/resources",
+        timeout=15.0,
+        params={"path": "disk:/api-tests/resource"},
+        data="{}",
+        headers={"Content-Type": "text/plain"},
     )
 
 
