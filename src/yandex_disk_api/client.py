@@ -175,6 +175,35 @@ class YandexDiskClient:
             ),
         )
 
+    def list_public_resources(
+        self,
+        *,
+        fields: str | None = None,
+        limit: int | str | None = None,
+        offset: int | str | None = None,
+        preview_crop: bool | None = None,
+        preview_size: str | None = None,
+        resource_type: str | None = None,
+        expected_statuses: Collection[int] = (200,),
+    ) -> requests.Response:
+        """GET resources that have a public link."""
+        params = _query_params(
+            fields=fields,
+            limit=limit,
+            offset=offset,
+            preview_crop=preview_crop,
+            preview_size=preview_size,
+        )
+        if resource_type is not None:
+            params["type"] = resource_type
+
+        return self._request(
+            "GET",
+            "/resources/public",
+            expected_statuses=expected_statuses,
+            params=params,
+        )
+
     def create_folder(
         self,
         path: str | None,
@@ -244,6 +273,33 @@ class YandexDiskClient:
             params=params,
         )
 
+    def move_resource(
+        self,
+        source_path: str | None,
+        destination_path: str | None,
+        *,
+        fields: str | None = None,
+        force_async: bool | None = None,
+        overwrite: bool | None = None,
+        expected_statuses: Collection[int] = (201, 202),
+    ) -> requests.Response:
+        """POST a request to move a file or directory."""
+        params = _query_params(
+            path=destination_path,
+            fields=fields,
+            force_async=force_async,
+            overwrite=overwrite,
+        )
+        if source_path is not None:
+            params["from"] = source_path
+
+        return self._request(
+            "POST",
+            "/resources/move",
+            expected_statuses=expected_statuses,
+            params=params,
+        )
+
     def get_download_link(
         self,
         path: str | None,
@@ -255,6 +311,36 @@ class YandexDiskClient:
         return self._request(
             "GET",
             "/resources/download",
+            expected_statuses=expected_statuses,
+            params=_query_params(path=path, fields=fields),
+        )
+
+    def publish_resource(
+        self,
+        path: str,
+        *,
+        fields: str | None = None,
+        expected_statuses: Collection[int] = (200,),
+    ) -> requests.Response:
+        """PUT a public link on one test resource."""
+        return self._request(
+            "PUT",
+            "/resources/publish",
+            expected_statuses=expected_statuses,
+            params=_query_params(path=path, fields=fields),
+        )
+
+    def unpublish_resource(
+        self,
+        path: str,
+        *,
+        fields: str | None = None,
+        expected_statuses: Collection[int] = (200,),
+    ) -> requests.Response:
+        """PUT removal of a public link from one test resource."""
+        return self._request(
+            "PUT",
+            "/resources/unpublish",
             expected_statuses=expected_statuses,
             params=_query_params(path=path, fields=fields),
         )

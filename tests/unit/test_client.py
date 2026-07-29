@@ -217,6 +217,36 @@ def test_list_last_uploaded_sends_all_query_parameters(
     )
 
 
+def test_list_public_resources_sends_all_query_parameters(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(200)
+
+    client.list_public_resources(
+        fields="limit,items.name",
+        limit=5,
+        offset=2,
+        preview_crop=True,
+        preview_size="S",
+        resource_type="file",
+    )
+
+    session.request.assert_called_once_with(
+        "GET",
+        f"{BASE_URL}/resources/public",
+        timeout=15.0,
+        params={
+            "fields": "limit,items.name",
+            "limit": 5,
+            "offset": 2,
+            "preview_crop": "true",
+            "preview_size": "S",
+            "type": "file",
+        },
+    )
+
+
 def test_copy_resource_sends_post(client: YandexDiskClient, session: Mock) -> None:
     session.request.return_value = make_response(201)
 
@@ -242,6 +272,31 @@ def test_copy_resource_sends_post(client: YandexDiskClient, session: Mock) -> No
     )
 
 
+def test_move_resource_sends_post(client: YandexDiskClient, session: Mock) -> None:
+    session.request.return_value = make_response(202)
+
+    client.move_resource(
+        "disk:/source",
+        "disk:/destination",
+        fields="href,method",
+        force_async=True,
+        overwrite=True,
+    )
+
+    session.request.assert_called_once_with(
+        "POST",
+        f"{BASE_URL}/resources/move",
+        timeout=15.0,
+        params={
+            "path": "disk:/destination",
+            "fields": "href,method",
+            "force_async": "true",
+            "overwrite": "true",
+            "from": "disk:/source",
+        },
+    )
+
+
 def test_get_download_link_sends_get(
     client: YandexDiskClient,
     session: Mock,
@@ -259,6 +314,35 @@ def test_get_download_link_sends_get(
         timeout=15.0,
         params={
             "path": "disk:/fixture.txt",
+            "fields": "href,method",
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    ("method_name", "endpoint"),
+    [
+        ("publish_resource", "/resources/publish"),
+        ("unpublish_resource", "/resources/unpublish"),
+    ],
+)
+def test_publication_methods_send_put(
+    client: YandexDiskClient,
+    session: Mock,
+    method_name: str,
+    endpoint: str,
+) -> None:
+    session.request.return_value = make_response(200)
+
+    method = getattr(client, method_name)
+    method("disk:/public-resource", fields="href,method")
+
+    session.request.assert_called_once_with(
+        "PUT",
+        f"{BASE_URL}{endpoint}",
+        timeout=15.0,
+        params={
+            "path": "disk:/public-resource",
             "fields": "href,method",
         },
     )
