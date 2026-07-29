@@ -123,6 +123,58 @@ class YandexDiskClient:
             ),
         )
 
+    def list_files(
+        self,
+        *,
+        fields: str | None = None,
+        limit: int | str | None = None,
+        media_type: str | None = None,
+        offset: int | str | None = None,
+        preview_crop: bool | None = None,
+        preview_size: str | None = None,
+        sort: str | None = None,
+        expected_statuses: Collection[int] = (200,),
+    ) -> requests.Response:
+        """GET the flat list of files on Disk."""
+        return self._request(
+            "GET",
+            "/resources/files",
+            expected_statuses=expected_statuses,
+            params=_query_params(
+                fields=fields,
+                limit=limit,
+                media_type=media_type,
+                offset=offset,
+                preview_crop=preview_crop,
+                preview_size=preview_size,
+                sort=sort,
+            ),
+        )
+
+    def list_last_uploaded(
+        self,
+        *,
+        fields: str | None = None,
+        limit: int | str | None = None,
+        media_type: str | None = None,
+        preview_crop: bool | None = None,
+        preview_size: str | None = None,
+        expected_statuses: Collection[int] = (200,),
+    ) -> requests.Response:
+        """GET files ordered from newest to oldest upload."""
+        return self._request(
+            "GET",
+            "/resources/last-uploaded",
+            expected_statuses=expected_statuses,
+            params=_query_params(
+                fields=fields,
+                limit=limit,
+                media_type=media_type,
+                preview_crop=preview_crop,
+                preview_size=preview_size,
+            ),
+        )
+
     def create_folder(
         self,
         path: str | None,

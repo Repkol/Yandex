@@ -157,6 +157,66 @@ def test_get_resource_sends_optional_query_parameters(
     )
 
 
+def test_list_files_sends_all_query_parameters(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(200)
+
+    client.list_files(
+        fields="limit,items.name",
+        limit=10,
+        media_type="image",
+        offset=2,
+        preview_crop=True,
+        preview_size="S",
+        sort="-modified",
+    )
+
+    session.request.assert_called_once_with(
+        "GET",
+        f"{BASE_URL}/resources/files",
+        timeout=15.0,
+        params={
+            "fields": "limit,items.name",
+            "limit": 10,
+            "media_type": "image",
+            "offset": 2,
+            "preview_crop": "true",
+            "preview_size": "S",
+            "sort": "-modified",
+        },
+    )
+
+
+def test_list_last_uploaded_sends_all_query_parameters(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(200)
+
+    client.list_last_uploaded(
+        fields="limit,items.name",
+        limit=5,
+        media_type="video",
+        preview_crop=False,
+        preview_size="M",
+    )
+
+    session.request.assert_called_once_with(
+        "GET",
+        f"{BASE_URL}/resources/last-uploaded",
+        timeout=15.0,
+        params={
+            "fields": "limit,items.name",
+            "limit": 5,
+            "media_type": "video",
+            "preview_crop": "false",
+            "preview_size": "M",
+        },
+    )
+
+
 def test_copy_resource_sends_post(client: YandexDiskClient, session: Mock) -> None:
     session.request.return_value = make_response(201)
 
