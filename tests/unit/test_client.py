@@ -743,6 +743,50 @@ def test_delete_trash_root_omits_path_without_live_request(
     )
 
 
+def test_restore_trash_resource_sends_all_parameters(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(202)
+
+    client.restore_trash_resource(
+        "trash:/removed",
+        fields="href,method",
+        force_async=True,
+        name="restored.txt",
+        overwrite=True,
+    )
+
+    session.request.assert_called_once_with(
+        "PUT",
+        f"{BASE_URL}/trash/resources/restore",
+        timeout=15.0,
+        params={
+            "path": "trash:/removed",
+            "fields": "href,method",
+            "force_async": "true",
+            "name": "restored.txt",
+            "overwrite": "true",
+        },
+    )
+
+
+def test_restore_trash_resource_omits_optional_parameters(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.return_value = make_response(201)
+
+    client.restore_trash_resource("trash:/removed")
+
+    session.request.assert_called_once_with(
+        "PUT",
+        f"{BASE_URL}/trash/resources/restore",
+        timeout=15.0,
+        params={"path": "trash:/removed"},
+    )
+
+
 def test_unexpected_status_raises_readable_error(
     client: YandexDiskClient,
     session: Mock,

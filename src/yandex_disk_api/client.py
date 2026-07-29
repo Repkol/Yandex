@@ -599,6 +599,30 @@ class YandexDiskClient:
             ),
         )
 
+    def restore_trash_resource(
+        self,
+        path: str | None,
+        *,
+        fields: str | None = None,
+        force_async: bool | str | None = None,
+        name: str | None = None,
+        overwrite: bool | str | None = None,
+        expected_statuses: Collection[int] = (201, 202),
+    ) -> requests.Response:
+        """PUT restoration of one resource from the Trash."""
+        return self._request(
+            "PUT",
+            "/trash/resources/restore",
+            expected_statuses=expected_statuses,
+            params=_query_params(
+                path=path,
+                fields=fields,
+                force_async=force_async,
+                name=name,
+                overwrite=overwrite,
+            ),
+        )
+
     def get_operation(
         self,
         operation_url: str,
