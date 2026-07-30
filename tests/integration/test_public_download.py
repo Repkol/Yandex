@@ -16,7 +16,6 @@ from .conftest import (
     unique_child,
     upload_test_file,
     wait_for_public_resource_state,
-    wait_for_publication_state,
 )
 
 pytestmark = pytest.mark.integration
@@ -305,21 +304,15 @@ def test_revoked_public_key_has_no_download_link(
     """Negative edge: unpublish invalidates public download access."""
     file_path = f"{unique_child(sandbox_path, 'public-download-revoked')}.txt"
     upload_test_file(disk_client, file_path, b"revoked")
-    disk_client.publish_resource(file_path)
-    private = wait_for_publication_state(
-        disk_client,
-        file_path,
-        published=True,
-    )
-    public_key = str(private["public_key"])
-    wait_for_public_resource_state(
-        public_disk_client,
-        public_key,
-        present=True,
-    )
 
-    disk_client.unpublish_resource(file_path)
-    wait_for_publication_state(disk_client, file_path, published=False)
+    with temporarily_published_resource(disk_client, file_path) as private:
+        public_key = str(private["public_key"])
+        wait_for_public_resource_state(
+            public_disk_client,
+            public_key,
+            present=True,
+        )
+
     wait_for_public_resource_state(
         public_disk_client,
         public_key,
