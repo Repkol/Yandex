@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from hashlib import md5
 
 import pytest
@@ -38,9 +39,31 @@ def assert_upload_link(
     return str(payload["href"])
 
 
-def put_file_content(url: str, content: bytes) -> requests.Response:
-    """Upload bytes without forwarding the API client's OAuth header."""
-    return requests.put(url, data=content, timeout=30)
+def upload_file_content(
+    client: YandexDiskClient,
+    path: str,
+    content: bytes,
+    *,
+    fields: str | None = None,
+    overwrite: bool | None = None,
+    expected_fields: set[str] | None = None,
+) -> requests.Response:
+    """Upload bytes, refreshing a temporary link after connection failures."""
+    for attempt in range(5):
+        link = client.get_upload_link(
+            path,
+            fields=fields,
+            overwrite=overwrite,
+        )
+        url = assert_upload_link(link, expected_fields=expected_fields)
+        try:
+            return requests.put(url, data=content, timeout=30)
+        except requests.exceptions.ConnectionError:
+            if attempt == 4:
+                raise
+            time.sleep(0.5 * (2**attempt))
+
+    raise AssertionError("unreachable")
 
 
 def test_get_upload_link_happy_path_uploads_exact_content(
@@ -51,8 +74,7 @@ def test_get_upload_link_happy_path_uploads_exact_content(
     file_path = f"{unique_child(sandbox_path, 'upload-happy')}.txt"
     content = b"exact content uploaded through a temporary URL"
 
-    response = disk_client.get_upload_link(file_path)
-    upload = put_file_content(assert_upload_link(response), content)
+    upload = upload_file_content(disk_client, file_path, content)
     metadata = disk_client.get_resource(file_path).json()
 
     assert upload.status_code == requests.codes.created
@@ -69,16 +91,12 @@ def test_get_upload_link_fields_limits_response(
     """Positive: fields limits attributes without invalidating the URL."""
     file_path = f"{unique_child(sandbox_path, 'upload-fields')}.txt"
 
-    response = disk_client.get_upload_link(
+    upload = upload_file_content(
+        disk_client,
         file_path,
-        fields="href,method",
-    )
-    upload = put_file_content(
-        assert_upload_link(
-            response,
-            expected_fields={"href", "method"},
-        ),
         b"fields",
+        fields="href,method",
+        expected_fields={"href", "method"},
     )
 
     assert upload.status_code == requests.codes.created
@@ -94,8 +112,12 @@ def test_get_upload_link_overwrite_replaces_existing_file(
     before = upload_test_file(disk_client, file_path, b"old content")
     new_content = b"new replacement content"
 
-    response = disk_client.get_upload_link(file_path, overwrite=True)
-    upload = put_file_content(assert_upload_link(response), new_content)
+    upload = upload_file_content(
+        disk_client,
+        file_path,
+        new_content,
+        overwrite=True,
+    )
     after = disk_client.get_resource(file_path).json()
 
     assert upload.status_code == requests.codes.created
@@ -112,8 +134,7 @@ def test_get_upload_link_supports_unicode_and_spaces(
     file_path = f"{unique_child(sandbox_path, 'загрузка файла')}.txt"
     content = "данные файла".encode()
 
-    response = disk_client.get_upload_link(file_path)
-    upload = put_file_content(assert_upload_link(response), content)
+    upload = upload_file_content(disk_client, file_path, content)
     metadata = disk_client.get_resource(file_path).json()
 
     assert upload.status_code == requests.codes.created
@@ -128,8 +149,7 @@ def test_get_upload_link_accepts_empty_file(
     """Edge case: an empty request body creates a zero-byte file."""
     file_path = f"{unique_child(sandbox_path, 'upload-empty')}.txt"
 
-    response = disk_client.get_upload_link(file_path)
-    upload = put_file_content(assert_upload_link(response), b"")
+    upload = upload_file_content(disk_client, file_path, b"")
     metadata = disk_client.get_resource(file_path).json()
 
     assert upload.status_code == requests.codes.created
