@@ -82,15 +82,30 @@ class YandexDiskClient:
         expected_statuses: Collection[int],
         **kwargs: Any,
     ) -> requests.Response:
-        url = f"{self.base_url}{endpoint}"
+        url = (
+            endpoint
+            if endpoint.startswith("https://")
+            else f"{self.base_url}{endpoint}"
+        )
         transient_statuses = {429, 500, 503}
         for attempt in range(3):
-            response = self.session.request(
-                method,
-                url,
-                timeout=self.timeout,
-                **kwargs,
-            )
+            try:
+                response = self.session.request(
+                    method,
+                    url,
+                    timeout=self.timeout,
+                    **kwargs,
+                )
+            except (
+                requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout,
+            ):
+                should_retry = method.upper() == "GET" and attempt < 2
+                if not should_retry:
+                    raise
+                time.sleep(0.5 * (2**attempt))
+                continue
+
             if response.status_code in expected_statuses:
                 return response
             should_retry = (
@@ -645,14 +660,11 @@ class YandexDiskClient:
         expected_statuses: Collection[int] = (200,),
     ) -> requests.Response:
         """GET the state of an asynchronous operation."""
-        response = self.session.request(
+        return self._request(
             "GET",
             operation_url,
-            timeout=self.timeout,
+            expected_statuses=expected_statuses,
         )
-        if response.status_code not in expected_statuses:
-            raise YandexDiskApiError("GET", operation_url, response)
-        return response
 
     def get_operation_status(
         self,

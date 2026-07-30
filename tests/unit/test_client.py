@@ -130,6 +130,37 @@ def test_get_retries_transient_service_error(
     sleep.assert_called_once_with(0.5)
 
 
+def test_get_retries_transient_connection_error(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.side_effect = [
+        requests.exceptions.ConnectTimeout("temporary network failure"),
+        make_response(200, '{"total_space": 10}'),
+    ]
+
+    with patch("yandex_disk_api.client.time.sleep") as sleep:
+        response = client.get_disk_info()
+
+    assert response.status_code == requests.codes.ok
+    assert session.request.call_count == 2
+    sleep.assert_called_once_with(0.5)
+
+
+def test_state_changing_request_does_not_retry_connection_error(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.side_effect = requests.exceptions.ConnectTimeout(
+        "delivery status is unknown"
+    )
+
+    with pytest.raises(requests.exceptions.ConnectTimeout):
+        client.copy_resource("disk:/source", "disk:/destination")
+
+    session.request.assert_called_once()
+
+
 def test_create_folder_sends_put(client: YandexDiskClient, session: Mock) -> None:
     session.request.return_value = make_response(201)
 
@@ -827,6 +858,26 @@ def test_restore_trash_resource_omits_optional_parameters(
         f"{BASE_URL}/trash/resources/restore",
         timeout=15.0,
         params={"path": "trash:/removed"},
+    )
+
+
+def test_restore_trash_root_request_is_covered_without_live_call(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    """Never send this potentially account-wide request from a live test."""
+    session.request.return_value = make_response(202)
+
+    client.restore_trash_resource(
+        "trash:/",
+        expected_statuses={202},
+    )
+
+    session.request.assert_called_once_with(
+        "PUT",
+        f"{BASE_URL}/trash/resources/restore",
+        timeout=15.0,
+        params={"path": "trash:/"},
     )
 
 

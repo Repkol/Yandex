@@ -47,13 +47,32 @@ def _move_to_trash(
     client: YandexDiskClient,
     origin_path: str,
 ) -> dict[str, object]:
-    deletion = client.delete_resource(origin_path)
-    assert deletion.status_code in {
-        requests.codes.accepted,
-        requests.codes.no_content,
-    }
-    wait_for_operation(client, deletion, timeout=60.0)
-    wait_for_resource_state(client, origin_path, exists=False, timeout=60.0)
+    for attempt in range(3):
+        deletion = client.delete_resource(
+            origin_path,
+            expected_statuses={202, 204, 404, 423},
+        )
+        if deletion.status_code == requests.codes.locked:
+            time.sleep(0.5 * (2**attempt))
+            continue
+        if deletion.status_code != requests.codes.not_found:
+            wait_for_operation(client, deletion, timeout=60.0)
+        try:
+            wait_for_resource_state(
+                client,
+                origin_path,
+                exists=False,
+                timeout=30.0,
+            )
+        except pytest.fail.Exception:
+            if attempt == 2:
+                raise
+            time.sleep(0.5 * (2**attempt))
+            continue
+        break
+    else:
+        pytest.fail(f"Could not move test resource {origin_path!r} to Trash")
+
     return wait_for_trashed_origin(client, origin_path, timeout=60.0)
 
 
@@ -434,22 +453,6 @@ def test_restore_empty_path_returns_400(
     )
 
     assert_error_response(response, requests.codes.bad_request)
-
-
-def test_restore_trash_root_is_rejected(
-    disk_client: YandexDiskClient,
-) -> None:
-    """Negative edge: the Trash root itself is not restorable."""
-    response = disk_client.restore_trash_resource(
-        "trash:/",
-        expected_statuses={400, 404},
-    )
-
-    assert response.status_code in {
-        requests.codes.bad_request,
-        requests.codes.not_found,
-    }
-    assert_error_response(response, response.status_code)
 
 
 def test_restore_missing_trash_resource_returns_404(

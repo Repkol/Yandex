@@ -86,7 +86,7 @@ def upload_test_file(
     content: bytes,
 ) -> dict[str, object]:
     """Upload a small fixture file and return its resource metadata."""
-    for attempt in range(3):
+    for attempt in range(5):
         upload_url = client.get_upload_link(path, overwrite=True).json()["href"]
         try:
             upload = requests.put(
@@ -95,8 +95,11 @@ def upload_test_file(
                 timeout=client.timeout,
             )
             break
-        except requests.exceptions.ConnectTimeout:
-            if attempt == 2:
+        except (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout,
+        ):
+            if attempt == 4:
                 raise
             time.sleep(0.5 * (2**attempt))
 
@@ -194,6 +197,8 @@ def temporarily_published_resource(
 ) -> Iterator[dict[str, object]]:
     """Publish one test resource and always revoke its public link."""
     transient_statuses = {429, 500, 503}
+    metadata = None
+    response = None
     for attempt in range(3):
         response = client.publish_resource(
             path,
@@ -202,27 +207,30 @@ def temporarily_published_resource(
             expected_statuses={200, *transient_statuses},
         )
         if response.status_code == requests.codes.ok:
-            break
+            try:
+                metadata = wait_for_publication_state(
+                    client,
+                    path,
+                    published=True,
+                    timeout=60.0,
+                )
+            except pytest.fail.Exception:
+                pass
+            else:
+                break
         if attempt < 2:
             time.sleep(0.5 * (2**attempt))
-    else:
-        pytest.fail(
-            "Test resource publication failed after retries: "
-            f"HTTP {response.status_code} {response.text[:500]}"
-        )
 
-    try:
-        metadata = wait_for_publication_state(
-            client,
-            path,
-            published=True,
-            timeout=180.0,
-        )
-    except pytest.fail.Exception:
-        if not skip_if_unavailable:
-            raise
+    if metadata is None:
         client.unpublish_resource(path, expected_statuses={200, 404})
-        pytest.skip("A public link could not be prepared for this capability test")
+        if skip_if_unavailable:
+            pytest.skip("A public link could not be prepared for this capability test")
+        status = response.status_code if response is not None else "<no response>"
+        details = response.text[:500] if response is not None else ""
+        pytest.fail(
+            "Test resource publication did not become available after retries: "
+            f"HTTP {status} {details}"
+        )
 
     try:
         yield metadata
