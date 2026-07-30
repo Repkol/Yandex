@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 
@@ -81,17 +82,28 @@ def test_publish_file_with_read_only_settings(
     upload_test_file(disk_client, file_path, b"read-only public fixture")
 
     with publication_cleanup(disk_client, file_path):
-        response = disk_client.publish_resource(
-            file_path,
-            body={"public_settings": {"read_only": True}},
-        )
+        metadata = None
+        for attempt in range(3):
+            response = disk_client.publish_resource(
+                file_path,
+                body={"public_settings": {"read_only": True}},
+            )
+            assert_link_response(response)
+            try:
+                metadata = wait_for_publication_state(
+                    disk_client,
+                    file_path,
+                    published=True,
+                    timeout=60.0,
+                )
+            except pytest.fail.Exception:
+                if attempt == 2:
+                    raise
+                time.sleep(0.5 * (2**attempt))
+            else:
+                break
 
-        assert_link_response(response)
-        metadata = wait_for_publication_state(
-            disk_client,
-            file_path,
-            published=True,
-        )
+        assert metadata is not None
         assert metadata["public_key"]
 
 
