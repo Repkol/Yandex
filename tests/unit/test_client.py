@@ -161,6 +161,40 @@ def test_state_changing_request_does_not_retry_connection_error(
     session.request.assert_called_once()
 
 
+def test_publish_retries_transient_service_error(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.side_effect = [
+        make_response(500),
+        make_response(200),
+    ]
+
+    with patch("yandex_disk_api.client.time.sleep") as sleep:
+        response = client.publish_resource("disk:/public-resource")
+
+    assert response.status_code == requests.codes.ok
+    assert session.request.call_count == 2
+    sleep.assert_called_once_with(0.5)
+
+
+def test_publish_retries_transient_connection_error(
+    client: YandexDiskClient,
+    session: Mock,
+) -> None:
+    session.request.side_effect = [
+        requests.exceptions.ConnectTimeout("temporary network failure"),
+        make_response(200),
+    ]
+
+    with patch("yandex_disk_api.client.time.sleep") as sleep:
+        response = client.publish_resource("disk:/public-resource")
+
+    assert response.status_code == requests.codes.ok
+    assert session.request.call_count == 2
+    sleep.assert_called_once_with(0.5)
+
+
 def test_create_folder_sends_put(client: YandexDiskClient, session: Mock) -> None:
     session.request.return_value = make_response(201)
 

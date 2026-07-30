@@ -80,6 +80,7 @@ class YandexDiskClient:
         endpoint: str,
         *,
         expected_statuses: Collection[int],
+        retry_transient: bool = False,
         **kwargs: Any,
     ) -> requests.Response:
         url = (
@@ -100,7 +101,9 @@ class YandexDiskClient:
                 requests.exceptions.ConnectionError,
                 requests.exceptions.Timeout,
             ):
-                should_retry = method.upper() == "GET" and attempt < 2
+                should_retry = (
+                    method.upper() == "GET" or retry_transient
+                ) and attempt < 2
                 if not should_retry:
                     raise
                 time.sleep(0.5 * (2**attempt))
@@ -109,7 +112,7 @@ class YandexDiskClient:
             if response.status_code in expected_statuses:
                 return response
             should_retry = (
-                method.upper() == "GET"
+                (method.upper() == "GET" or retry_transient)
                 and response.status_code in transient_statuses
                 and attempt < 2
             )
@@ -492,6 +495,7 @@ class YandexDiskClient:
             "PUT",
             "/resources/publish",
             expected_statuses=expected_statuses,
+            retry_transient=True,
             params=_query_params(
                 path=path,
                 allow_address_access=allow_address_access,
@@ -512,6 +516,7 @@ class YandexDiskClient:
             "PUT",
             "/resources/unpublish",
             expected_statuses=expected_statuses,
+            retry_transient=True,
             params=_query_params(path=path, fields=fields),
         )
 
