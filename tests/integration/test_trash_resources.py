@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
@@ -42,10 +43,33 @@ def _move_to_trash(
     client: YandexDiskClient,
     origin_path: str,
 ) -> dict[str, object]:
-    deletion = client.delete_resource(origin_path)
-    assert_successful_trash_deletion(deletion)
-    wait_for_operation(client, deletion, timeout=60.0)
-    wait_for_resource_state(client, origin_path, exists=False, timeout=60.0)
+    for attempt in range(3):
+        deletion = client.delete_resource(
+            origin_path,
+            expected_statuses={202, 204, 404, 423},
+        )
+        if deletion.status_code == requests.codes.locked:
+            time.sleep(0.5 * (2**attempt))
+            continue
+        if deletion.status_code != requests.codes.not_found:
+            assert_successful_trash_deletion(deletion)
+            wait_for_operation(client, deletion, timeout=60.0)
+        try:
+            wait_for_resource_state(
+                client,
+                origin_path,
+                exists=False,
+                timeout=30.0,
+            )
+        except pytest.fail.Exception:
+            if attempt == 2:
+                raise
+            time.sleep(0.5 * (2**attempt))
+            continue
+        break
+    else:
+        pytest.fail(f"Could not move test resource {origin_path!r} to Trash")
+
     return wait_for_trashed_origin(client, origin_path, timeout=60.0)
 
 

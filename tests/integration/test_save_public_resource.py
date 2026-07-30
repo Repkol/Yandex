@@ -189,10 +189,12 @@ def test_save_nested_file_from_public_folder(
     response = disk_client.save_public_resource_to_disk(
         str(published_save_folder["public_key"]),
         path=str(published_save_folder["nested_public_path"]),
+        force_async=True,
         name="selected.txt",
         save_path=destination_folder,
     )
 
+    assert response.status_code == requests.codes.accepted
     assert_save_link(response)
     wait_for_operation(disk_client, response, timeout=60.0)
     wait_for_resource_state(disk_client, saved_path, exists=True, timeout=60.0)
