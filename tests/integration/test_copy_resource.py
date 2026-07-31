@@ -12,6 +12,7 @@ from .conftest import (
     unique_child,
     upload_test_file,
     wait_for_operation,
+    wait_for_resource_metadata,
     wait_for_resource_state,
 )
 
@@ -171,7 +172,14 @@ def test_copy_resource_overwrite_replaces_existing_file(
     )
     assert_successful_copy(response)
     wait_for_operation(disk_client, response)
-    destination_after = disk_client.get_resource(destination_path).json()
+    destination_after = wait_for_resource_metadata(
+        disk_client,
+        destination_path,
+        expected={
+            "md5": source["md5"],
+            "size": source["size"],
+        },
+    )
 
     assert destination_after["md5"] == source["md5"]
     assert destination_after["size"] == source["size"]

@@ -16,6 +16,7 @@ from .conftest import (
     unique_child,
     upload_test_file,
     wait_for_operation,
+    wait_for_resource_metadata,
     wait_for_resource_state,
     wait_for_trash_resource_state,
     wait_for_trashed_origin,
@@ -373,7 +374,14 @@ def test_restore_with_overwrite_replaces_existing_file(
 
         assert_restore_link(response)
         wait_for_operation(disk_client, response, timeout=60.0)
-        restored = disk_client.get_resource(origin_path).json()
+        restored = wait_for_resource_metadata(
+            disk_client,
+            origin_path,
+            expected={
+                "md5": original["md5"],
+                "size": original["size"],
+            },
+        )
         assert restored["md5"] == original["md5"]
 
 

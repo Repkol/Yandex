@@ -14,6 +14,7 @@ from .conftest import (
     assert_error_response,
     unique_child,
     upload_test_file,
+    wait_for_resource_metadata,
 )
 
 pytestmark = pytest.mark.integration
@@ -118,7 +119,14 @@ def test_get_upload_link_overwrite_replaces_existing_file(
         new_content,
         overwrite=True,
     )
-    after = disk_client.get_resource(file_path).json()
+    after = wait_for_resource_metadata(
+        disk_client,
+        file_path,
+        expected={
+            "md5": md5(new_content).hexdigest(),
+            "size": len(new_content),
+        },
+    )
 
     assert upload.status_code == requests.codes.created
     assert after["md5"] == md5(new_content).hexdigest()

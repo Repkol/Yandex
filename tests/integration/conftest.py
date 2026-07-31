@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from uuid import uuid4
 
@@ -12,6 +12,27 @@ import pytest
 import requests
 
 from yandex_disk_api import YandexDiskClient
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Register options for eventually consistent live API indexes."""
+    group = parser.getgroup("yandex-disk")
+    group.addoption(
+        "--media-index-timeout",
+        action="store",
+        default=300.0,
+        type=float,
+        help="seconds to wait for /resources/files media_type indexing",
+    )
+
+
+@pytest.fixture(scope="session")
+def media_index_timeout(pytestconfig: pytest.Config) -> float:
+    """Return the configured deadline for the asynchronous media index."""
+    timeout = float(pytestconfig.getoption("--media-index-timeout"))
+    if timeout <= 0:
+        raise pytest.UsageError("--media-index-timeout must be greater than zero")
+    return timeout
 
 
 @pytest.fixture(scope="session")
@@ -158,6 +179,33 @@ def wait_for_resource_state(
 
     expected = "appear" if exists else "disappear"
     pytest.fail(f"Resource {path!r} did not {expected} in {timeout} seconds")
+
+
+def wait_for_resource_metadata(
+    client: YandexDiskClient,
+    path: str,
+    *,
+    expected: Mapping[str, object],
+    timeout: float = 60.0,
+) -> dict[str, object]:
+    """Poll until a resource exposes one exact, non-empty metadata subset."""
+    if not expected:
+        raise ValueError("expected metadata must not be empty")
+
+    deadline = time.monotonic() + timeout
+    last_metadata: dict[str, object] | None = None
+    while time.monotonic() < deadline:
+        response = client.get_resource(path, expected_statuses={200, 404})
+        if response.status_code == requests.codes.ok:
+            last_metadata = response.json()
+            if all(last_metadata.get(key) == value for key, value in expected.items()):
+                return last_metadata
+        time.sleep(0.25)
+
+    pytest.fail(
+        f"Resource {path!r} did not expose metadata {dict(expected)!r} "
+        f"in {timeout} seconds; last metadata: {last_metadata!r}"
+    )
 
 
 def wait_for_publication_state(

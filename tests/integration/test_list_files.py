@@ -66,6 +66,32 @@ def wait_for_flat_paths(
     pytest.fail(f"Paths did not appear in flat file list: {expected_paths}")
 
 
+def wait_for_media_index_path(
+    client: YandexDiskClient,
+    path: str,
+    *,
+    media_type: str,
+    timeout: float,
+) -> list[dict[str, object]]:
+    """Poll the slower media index until one exact test path is returned."""
+    deadline = time.monotonic() + timeout
+    last_item_count = 0
+    while time.monotonic() < deadline:
+        items = collect_flat_files(client, media_type=media_type)
+        last_item_count = len(items)
+        if any(item.get("path") == path for item in items):
+            return items
+
+        remaining = deadline - time.monotonic()
+        if remaining > 0:
+            time.sleep(min(2.0, remaining))
+
+    pytest.fail(
+        f"Path {path!r} did not appear in media_type={media_type!r} index "
+        f"in {timeout} seconds; last item count: {last_item_count}"
+    )
+
+
 def test_list_files_happy_path_returns_files_but_not_folders(
     disk_client: YandexDiskClient,
     sandbox_path: str,
@@ -154,18 +180,23 @@ def test_list_files_fields_limits_response(
 def test_list_files_media_type_filters_images(
     disk_client: YandexDiskClient,
     sandbox_path: str,
+    media_index_timeout: float,
 ) -> None:
     """Positive: media_type=image returns the uploaded image."""
     file_path = f"{sandbox_path}/000-flat-image-{uuid4().hex}.png"
     metadata = upload_test_file(disk_client, file_path, ONE_PIXEL_PNG)
     assert metadata["media_type"] == "image"
 
-    items = wait_for_flat_paths(
+    wait_for_flat_paths(disk_client, {file_path})
+    items = wait_for_media_index_path(
         disk_client,
-        {file_path},
+        file_path,
         media_type="image",
+        timeout=media_index_timeout,
     )
 
+    assert items
+    assert file_path in {item["path"] for item in items}
     assert all(item["media_type"] == "image" for item in items)
 
 

@@ -12,6 +12,7 @@ from .conftest import (
     unique_child,
     upload_test_file,
     wait_for_operation,
+    wait_for_resource_metadata,
     wait_for_resource_state,
 )
 
@@ -33,13 +34,23 @@ def assert_source_moved(
     client: YandexDiskClient,
     source_path: str,
     destination_path: str,
+    *,
+    expected_metadata: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Assert source disappearance and return destination metadata."""
     wait_for_resource_state(client, source_path, exists=False)
-    wait_for_resource_state(client, destination_path, exists=True)
+    if expected_metadata is None:
+        wait_for_resource_state(client, destination_path, exists=True)
+        destination = client.get_resource(destination_path).json()
+    else:
+        destination = wait_for_resource_metadata(
+            client,
+            destination_path,
+            expected=expected_metadata,
+        )
     missing = client.get_resource(source_path, expected_statuses={404})
     assert missing.status_code == requests.codes.not_found
-    return client.get_resource(destination_path).json()
+    return destination
 
 
 def test_move_folder_happy_path(
@@ -189,6 +200,10 @@ def test_move_resource_overwrite_replaces_existing_file(
         disk_client,
         source_path,
         destination_path,
+        expected_metadata={
+            "md5": source["md5"],
+            "size": source["size"],
+        },
     )
 
     assert destination_after["md5"] == source["md5"]

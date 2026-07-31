@@ -9,7 +9,8 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  quality:
+    name: lint and unit (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -35,8 +36,42 @@ jobs:
       - name: Run unit tests
         run: pytest tests/unit
 
-      - name: Run integration tests
-        if: github.event_name != 'pull_request'
-        env:
-          YANDEX_DISK_TOKEN: ${{ secrets.YANDEX_DISK_TOKEN }}
-        run: pytest tests/integration
+  live-integration:
+    name: live integration (single account)
+    if: github.event_name != 'pull_request'
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: yandex-disk-live-integration
+      cancel-in-progress: false
+    env:
+      YANDEX_DISK_TOKEN: ${{ secrets.YANDEX_DISK_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Full private and public live coverage enabled
+        if: env.YANDEX_DISK_TOKEN != ''
+        run: |
+          echo "Full live integration suite is enabled."
+          echo "## Live integration: full private and public suite" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Private live tests NOT RUN (secret is missing)
+        if: env.YANDEX_DISK_TOKEN == ''
+        run: |
+          echo "::warning title=Private live tests not run::YANDEX_DISK_TOKEN is not configured. Only unauthenticated public API tests will execute."
+          echo "## ⚠ Live integration: public tests only" >> "$GITHUB_STEP_SUMMARY"
+          echo "Private tests were skipped because YANDEX_DISK_TOKEN is not configured." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run live integration tests once
+        run: pytest tests/integration -vv
