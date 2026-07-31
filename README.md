@@ -73,7 +73,7 @@ pytest \
   tests/integration/test_create_folder.py::test_create_folder_happy_path_under_existing_parent \
   -vv
 
-# Полный live-набор; лимит ожидания отдельного media-индекса можно изменить
+# Полный live-набор; timeout нужен только для bootstrap чистого media-индекса
 pytest tests/integration -vv --media-index-timeout=300
 
 # Проверка стиля

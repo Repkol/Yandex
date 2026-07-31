@@ -11,7 +11,7 @@ import requests
 from yandex_disk_api import YandexDiskClient
 
 from .conftest import assert_error_response, upload_test_file
-from .test_list_files import ONE_PIXEL_PNG
+from .test_list_files import INDEXABLE_PNG
 
 pytestmark = pytest.mark.integration
 
@@ -97,7 +97,7 @@ def test_last_uploaded_media_type_filters_images(
 ) -> None:
     """Positive: media_type=image includes a newly uploaded image."""
     file_path = f"{sandbox_path}/recent-image-{uuid4().hex}.png"
-    metadata = upload_test_file(disk_client, file_path, ONE_PIXEL_PNG)
+    metadata = upload_test_file(disk_client, file_path, INDEXABLE_PNG)
     assert metadata["media_type"] == "image"
 
     items = wait_for_recent_paths(

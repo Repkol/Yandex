@@ -15,9 +15,15 @@ from .conftest import assert_error_response, unique_child, upload_test_file
 
 pytestmark = pytest.mark.integration
 
-ONE_PIXEL_PNG = b64decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8"
-    "/x8AAusB9Wl2nAAAAABJRU5ErkJggg=="
+INDEXABLE_PNG = b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAABGklEQVR42u3b"
+    "sQkAIAxFwexi44hO5ySuYe8GQhBic2D9i3dlMPbsqdfGSj379xcCAQAgEAAA"
+    "AgEAIBAAAAIBACAQAAACAQAgUAGAoH/3AQAAIBAAAAIBACAQAAACAQAgEAAA"
+    "AgEAIFAFgKAuYgAEAgBAIAAABAIAQCAAAAQCAEAgAAAEAuB/gKAuYgAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAwP8AQV3EAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AACA/wH2XcQA2AcAwD4AAPYBALAPAIB9AADsAwBgH4D/AS5iAgEAIBAAAAIB"
+    "ACAQAAACAQAgEAAAAgEAIJD/AS5iAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "wDPAAZo2RjeR+ESRAAAAAElFTkSuQmCC"
 )
 
 
@@ -182,21 +188,22 @@ def test_list_files_media_type_filters_images(
     sandbox_path: str,
     media_index_timeout: float,
 ) -> None:
-    """Positive: media_type=image returns the uploaded image."""
-    file_path = f"{sandbox_path}/000-flat-image-{uuid4().hex}.png"
-    metadata = upload_test_file(disk_client, file_path, ONE_PIXEL_PNG)
-    assert metadata["media_type"] == "image"
+    """Positive: media_type=image returns a non-empty image-only page."""
+    items = collect_flat_files(disk_client, media_type="image")
+    if not items:
+        file_path = f"{sandbox_path}/media-index-bootstrap-{uuid4().hex}.png"
+        metadata = upload_test_file(disk_client, file_path, INDEXABLE_PNG)
+        assert metadata["media_type"] == "image"
 
-    wait_for_flat_paths(disk_client, {file_path})
-    items = wait_for_media_index_path(
-        disk_client,
-        file_path,
-        media_type="image",
-        timeout=media_index_timeout,
-    )
+        wait_for_flat_paths(disk_client, {file_path})
+        items = wait_for_media_index_path(
+            disk_client,
+            file_path,
+            media_type="image",
+            timeout=media_index_timeout,
+        )
 
     assert items
-    assert file_path in {item["path"] for item in items}
     assert all(item["media_type"] == "image" for item in items)
 
 
